@@ -8,6 +8,7 @@ class CMM_Admin {
         add_action( 'admin_init', array( $this, 'register_settings' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
         add_action( 'admin_post_cmm_reset_defaults', array( $this, 'reset_defaults' ) );
+        add_action( 'admin_post_cmm_check_update', array( $this, 'check_update' ) );
     }
 
     public function reset_defaults() {
@@ -29,6 +30,21 @@ class CMM_Admin {
 
         update_option( 'cmm_settings', $default_options );
         wp_safe_redirect( admin_url( 'options-general.php?page=custom-maintenance-mode&reset=success' ) );
+        exit;
+    }
+
+    public function check_update() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( 'Nincs jogosultságod ehhez a művelethez.' );
+        }
+        check_admin_referer( 'cmm_update_nonce' );
+
+        // Globális PUC példány kikényszerítése a frissítés keresésére
+        global $cmm_update_checker;
+        if ( isset( $cmm_update_checker ) ) {
+            $cmm_update_checker->checkForUpdates();
+        }
+        wp_safe_redirect( admin_url( 'options-general.php?page=custom-maintenance-mode&update_checked=1' ) );
         exit;
     }
 
@@ -151,12 +167,17 @@ class CMM_Admin {
 
     public function render_admin_page() {
         $reset_url = wp_nonce_url( admin_url( 'admin-post.php?action=cmm_reset_defaults' ), 'cmm_reset_nonce' );
+        $update_url = wp_nonce_url( admin_url( 'admin-post.php?action=cmm_check_update' ), 'cmm_update_nonce' ); // ÚJ
         ?>
         <div class="wrap">
             <h1>Karbantartás Beállítások</h1>
             
             <?php if ( isset( $_GET['reset'] ) && $_GET['reset'] === 'success' ) : ?>
                 <div class="notice notice-success is-dismissible"><p>Az alapértelmezett beállítások sikeresen visszaállítva.</p></div>
+            <?php endif; ?>
+
+            <?php if ( isset( $_GET['update_checked'] ) && $_GET['update_checked'] === '1' ) : ?>
+                <div class="notice notice-info is-dismissible"><p>A GitHub repó ellenőrzése megtörtént. Ha van új kiadás (Release), az a <strong>Vezérlőpult -> Frissítések</strong> vagy a <strong>Bővítmények</strong> menüpont alatt fog megjelenni.</p></div>
             <?php endif; ?>
 
             <h2 class="nav-tab-wrapper" id="cmm-tabs">
@@ -175,8 +196,11 @@ class CMM_Admin {
                     <?php do_settings_sections( 'cmm-tab-content' ); ?>
                 </div>
 
-                <p class="submit" style="display: flex; gap: 15px; align-items: center; margin-top: 30px;">
+                <p class="submit" style="display: flex; gap: 15px; align-items: center; margin-top: 30px; flex-wrap: wrap;">
                     <?php submit_button( 'Módosítások mentése', 'primary', 'submit', false ); ?>
+                    
+                    <a href="<?php echo esc_url( $update_url ); ?>" class="button button-secondary">Frissítések keresése</a>
+                    
                     <a href="<?php echo esc_url( $reset_url ); ?>" class="button button-secondary" onclick="return confirm('Biztosan visszaállítod az alapértelmezett beállításokat? Minden eddigi módosítás elvész!');" style="color: #d63638; border-color: #d63638;">Alapértelmezett értékek visszaállítása</a>
                 </p>
             </form>

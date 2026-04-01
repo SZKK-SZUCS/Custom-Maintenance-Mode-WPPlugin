@@ -11,6 +11,17 @@
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
+// Plugin Update Checker integráció
+require_once plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+global $cmm_update_checker; // Globálissá tesszük, hogy az admin osztály elérje
+$cmm_update_checker = PucFactory::buildUpdateChecker(
+    'https://github.com/SZKK-SZUCS/Custom-Maintenance-Mode-WPPlugin', // SAJÁT URL!
+    __FILE__,
+    'custom-maintenance-mode'
+);
+$cmm_update_checker->setBranch('main');
 
 /**
  * Plugin aktiválásakor lefutó metódus.
