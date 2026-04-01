@@ -50,6 +50,10 @@ A bővítmény a háttérben automatikusan ellenőrzi a GitHub kiadásokat (Rele
 
 ## Changelog
 
+### 1.1.3
+
+- Some small fixes
+
 ### 1.1.2
 
 - Admin felület vizuális lapfülekre (Tabs) bontása (Beállítások / Tartalom).
