@@ -223,7 +223,7 @@
             <?php else : ?>
                 <p><?php echo wp_kses_post( $active_lang === 'en' ? $footer_en : $footer_hu ); ?></p>
             <?php endif; ?>
-            <p><a href="mailto:wordpress@sze.hu">wordpress@sze.hu</a></p>
+            <p><a href="mailto:website@sze.hu">website@sze.hu</a></p>
         </div>
     </div>
 </body>
