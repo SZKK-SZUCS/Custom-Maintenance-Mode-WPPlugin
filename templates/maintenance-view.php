@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="<?php echo $force_bilingual ? 'hu' : esc_attr( $active_lang ); ?>">
 <head>
-    // Készítette: Szurofka Márton - MFÜI
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>
