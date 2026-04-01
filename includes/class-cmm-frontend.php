@@ -1,4 +1,5 @@
 <?php
+// Készítette: Szurofka Márton - MFÜI
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class CMM_Frontend {

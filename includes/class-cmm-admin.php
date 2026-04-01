@@ -1,4 +1,5 @@
 <?php
+// Készítette: Szurofka Márton - MFÜI
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class CMM_Admin {
@@ -177,7 +178,7 @@ class CMM_Admin {
             <?php endif; ?>
 
             <?php if ( isset( $_GET['update_checked'] ) && $_GET['update_checked'] === '1' ) : ?>
-                <div class="notice notice-info is-dismissible"><p>A GitHub repó ellenőrzése megtörtént. Ha van új kiadás (Release), az a <strong>Vezérlőpult -> Frissítések</strong> vagy a <strong>Bővítmények</strong> menüpont alatt fog megjelenni.</p></div>
+                <div class="notice notice-info is-dismissible"><p>A frissítések ellenőrzése megtörtént. Ha van új kiadása a Pluginnak, az a <strong>Vezérlőpult -> Frissítések</strong> vagy a <strong>Bővítmények</strong> menüpont alatt fog megjelenni.</p></div>
             <?php endif; ?>
 
             <h2 class="nav-tab-wrapper" id="cmm-tabs">

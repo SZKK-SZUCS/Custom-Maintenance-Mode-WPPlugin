@@ -1,3 +1,4 @@
+// Készítette: Szurofka Márton - MFÜI
 jQuery(document).ready(function ($) {
   var mediaUploader;
 

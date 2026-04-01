@@ -2,11 +2,11 @@
 /**
  * Plugin Name: SZE - Custom Maintenance Mode
  * Description: Egyedi karbantartás mód plugin a telepítés idejére, valamint a későbbi karbantartási időszakokra.
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: Műszaki Fejlesztési és Üzemeltetési Igazgatóság
  * Text Domain: custom-maintenance-mode
  */
-
+    // Készítette: Szurofka Márton - MFÜI
 // Közvetlen hozzáférés tiltása
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
