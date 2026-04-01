@@ -50,6 +50,10 @@ A bővítmény a háttérben automatikusan ellenőrzi a GitHub kiadásokat (Rele
 
 ## Changelog
 
+### 1.1.4
+
+- Customer support email update
+
 ### 1.1.3
 
 - Some small fixes
