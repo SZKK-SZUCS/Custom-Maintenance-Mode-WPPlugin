@@ -8,24 +8,24 @@ class CMM_Frontend {
     }
 
     public function maintenance_mode_redirect() {
-        // --- 1. GOLYÓÁLLÓ BYPASS (SZE.HU & MSDL API) ---
+        // --- 1. ABSZOLÚT GOLYÓÁLLÓ BYPASS (Azonnali kilépés) ---
         
-        // A) MSDL Szerver-szerver kérések azonosítása az egyedi HTTP fejléc alapján (Legbiztosabb módszer!)
+        // A) MSDL API Fejlécek (Ha a Child plugin kér tokent vagy parancsot)
         if ( isset( $_SERVER['HTTP_X_MSDL_API_KEY'] ) || isset( $_SERVER['HTTP_X_MSDL_CHILD_DOMAIN'] ) ) {
             return;
         }
 
-        // B) Minden WordPress REST API kérés átengedése (így a háttérfolyamatok és Gutenberg blokkok nem halnak le)
+        // B) REST API kérések átengedése (a /wp-json/ kérések nem lehetnek karbantartás alatt)
         $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
         if ( strpos( $request_uri, '/wp-json/' ) !== false || strpos( $request_uri, 'rest_route' ) !== false ) {
             return;
         }
 
-        // C) A kért "*.sze.hu" domain bypass (ha a böngésző vagy a szerver küldi a Referer-t)
+        // C) Referer alapú SZE.HU domain engedélyezés
         if ( isset( $_SERVER['HTTP_REFERER'] ) && strpos( $_SERVER['HTTP_REFERER'], '.sze.hu' ) !== false ) {
             return;
         }
-        // ------------------------------------------------
+        // -------------------------------------------------------
 
         $options = get_option( 'cmm_settings' );
 

@@ -4,7 +4,7 @@
 **Requires at least:** 5.8
 **Tested up to:** 6.4
 **Requires PHP:** 7.4
-**Stable tag:** 1.1.7
+**Stable tag:** 1.1.8
 **License:** GPLv2 or later
 
 ## Description
@@ -49,6 +49,10 @@ Az admin felületen, a "Módosítások mentése" gomb mellett található egy "A
 A bővítmény a háttérben automatikusan ellenőrzi a GitHub kiadásokat (Releases). Ha azonnal szeretnéd ellenőrizni, a **Beállítások -> Karbantartás** oldalon kattints a "Frissítések keresése" gombra.
 
 ## Changelog
+
+### 1.1.8
+
+- Still wasn't good enough (it's 1:47am now...)
 
 ### 1.1.7
 
