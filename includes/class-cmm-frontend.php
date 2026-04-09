@@ -8,17 +8,28 @@ class CMM_Frontend {
     }
 
     public function maintenance_mode_redirect() {
+        // --- 1. GOLYÓÁLLÓ BYPASS (SZE.HU & MSDL API) ---
+        
+        // A) MSDL Szerver-szerver kérések azonosítása az egyedi HTTP fejléc alapján (Legbiztosabb módszer!)
+        if ( isset( $_SERVER['HTTP_X_MSDL_API_KEY'] ) || isset( $_SERVER['HTTP_X_MSDL_CHILD_DOMAIN'] ) ) {
+            return;
+        }
+
+        // B) Minden WordPress REST API kérés átengedése (így a háttérfolyamatok és Gutenberg blokkok nem halnak le)
+        $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
+        if ( strpos( $request_uri, '/wp-json/' ) !== false || strpos( $request_uri, 'rest_route' ) !== false ) {
+            return;
+        }
+
+        // C) A kért "*.sze.hu" domain bypass (ha a böngésző vagy a szerver küldi a Referer-t)
+        if ( isset( $_SERVER['HTTP_REFERER'] ) && strpos( $_SERVER['HTTP_REFERER'], '.sze.hu' ) !== false ) {
+            return;
+        }
+        // ------------------------------------------------
+
         $options = get_option( 'cmm_settings' );
 
         if ( empty( $options['is_active'] ) ) { return; }
-
-        // --- ÚJ, GOLYÓÁLLÓ MSDL API HÁTSÓ KAPU (BYPASS) ---
-        // Bármilyen URL formátum (pretty permalink vagy ?rest_route) esetén átengedi a kérést!
-        $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
-        if ( strpos( $request_uri, 'msdl-child' ) !== false || strpos( $request_uri, 'msdl-main' ) !== false ) {
-            return;
-        }
-        // ----------------------------------------
 
         if ( isset( $_GET['cmm_bypass'] ) ) {
             setcookie( 'cmm_bypass_active', '1', time() + 86400, COOKIEPATH, COOKIE_DOMAIN );
