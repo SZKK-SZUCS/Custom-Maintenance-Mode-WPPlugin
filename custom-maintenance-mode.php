@@ -3,7 +3,7 @@
  * Plugin Name: SZE - Custom Maintenance Mode
  * Plugin URI: https://github.com/SZKK-SZUCS/Custom-Maintenance-Mode-WPPlugin
  * Description: Egyedi karbantartás mód plugin a telepítés idejére, valamint a későbbi karbantartási időszakokra.
- * Version: 1.1.8
+ * Version: 1.1.9
  * Author: Műszaki Fejlesztési és Üzemeltetési Igazgatóság
  * Author URI: https://www.uni.sze.hu/
  * Text Domain: custom-maintenance-mode

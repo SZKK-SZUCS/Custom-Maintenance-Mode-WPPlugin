@@ -21,6 +21,18 @@ class CMM_Core {
     }
 
     public function disable_rest_api( $access ) {
+        // --- ÚJ: MSDL API HÁTSÓ KAPU A REST API SZINTJÉN ---
+        // Ha jön a titkos MSDL fejléc, azonnal átengedjük
+        if ( isset( $_SERVER['HTTP_X_MSDL_API_KEY'] ) || isset( $_SERVER['HTTP_X_MSDL_CHILD_DOMAIN'] ) ) {
+            return $access;
+        }
+        // Ha az URL-ben benne van az msdl-main vagy msdl-child, átengedjük
+        $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
+        if ( strpos( $request_uri, 'msdl-main' ) !== false || strpos( $request_uri, 'msdl-child' ) !== false ) {
+            return $access;
+        }
+        // ---------------------------------------------------
+
         $options = get_option( 'cmm_settings' );
         
         if ( ! empty( $options['is_active'] ) && ! current_user_can( 'manage_options' ) ) {
