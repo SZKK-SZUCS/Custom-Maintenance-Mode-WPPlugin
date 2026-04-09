@@ -4,7 +4,7 @@
 **Requires at least:** 5.8
 **Tested up to:** 6.4
 **Requires PHP:** 7.4
-**Stable tag:** 1.0.1
+**Stable tag:** 1.1.5
 **License:** GPLv2 or later
 
 ## Description
@@ -49,6 +49,10 @@ Az admin felületen, a "Módosítások mentése" gomb mellett található egy "A
 A bővítmény a háttérben automatikusan ellenőrzi a GitHub kiadásokat (Releases). Ha azonnal szeretnéd ellenőrizni, a **Beállítások -> Karbantartás** oldalon kattints a "Frissítések keresése" gombra.
 
 ## Changelog
+
+### 1.1.5
+
+- Gateway for MSDLWP plugin
 
 ### 1.1.4
 
