@@ -12,10 +12,10 @@ class CMM_Frontend {
 
         if ( empty( $options['is_active'] ) ) { return; }
 
-        // --- ÚJ: MSDL API HÁTSÓ KAPU (BYPASS) ---
-        // Ha a kérés az MSDL API-hoz megy (akár Main, akár Child), azonnal átengedjük!
+        // --- ÚJ, GOLYÓÁLLÓ MSDL API HÁTSÓ KAPU (BYPASS) ---
+        // Bármilyen URL formátum (pretty permalink vagy ?rest_route) esetén átengedi a kérést!
         $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
-        if ( strpos( $request_uri, '/wp-json/msdl-child/' ) !== false || strpos( $request_uri, '/wp-json/msdl-main/' ) !== false ) {
+        if ( strpos( $request_uri, 'msdl-child' ) !== false || strpos( $request_uri, 'msdl-main' ) !== false ) {
             return;
         }
         // ----------------------------------------
