@@ -26,7 +26,12 @@ class CMM_Admin {
             'main_text'          => '<h1>Karbantartás alatt</h1><p>Az oldal jelenleg fejlesztés alatt áll. Kérjük, látogasson vissza később!</p>',
             'main_text_en'       => '<h1>Under Maintenance</h1><p>The site is currently under development. Please check back later!</p>',
             'specific_urls'      => '',
-            'links'              => array()
+            'links'              => array(
+                array( 'label' => 'Egyetem központi oldala', 'label_en' => "University's Main Site", 'url' => 'https://uni.sze.hu' ),
+                array( 'label' => 'Hallgatóknak', 'label_en' => 'Students', 'url' => 'https://students.sze.hu' ),
+                array( 'label' => 'Kártya ügyintézés', 'label_en' => 'Card issues', 'url' => 'https://kartya.sze.hu' ),
+                array( 'label' => 'Parkolás ügyintézés', 'label_en' => 'Parking issues', 'url' => 'https://parkolas.sze.hu' )
+            )
         );
 
         update_option( 'cmm_settings', $default_options );
