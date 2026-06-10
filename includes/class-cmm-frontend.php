@@ -40,6 +40,20 @@ class CMM_Frontend {
             return;
         }
 
+        if ( is_user_logged_in() ) {
+            $current_user = wp_get_current_user();
+            $allowed_roles = isset( $options['allowed_roles'] ) && is_array( $options['allowed_roles'] ) ? $options['allowed_roles'] : array( 'administrator' );
+            
+            // A felhasználó szerepköreinek és az engedélyezett szerepköröknek a metszete
+            $user_roles = (array) $current_user->roles;
+            $intersect = array_intersect( $allowed_roles, $user_roles );
+            
+            // Ha van egyezés, vagy ha esetleg kicsuknánk az admint véletlenül, átengedjük
+            if ( ! empty( $intersect ) || current_user_can( 'manage_options' ) ) {
+                return; 
+            }
+        }
+
         $is_specific_mode = false;
         if ( ! empty( $options['specific_urls'] ) ) {
             $urls = array_filter( array_map( 'trim', explode( "\n", $options['specific_urls'] ) ) );
