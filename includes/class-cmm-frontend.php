@@ -73,6 +73,14 @@ class CMM_Frontend {
             }
         }
 
+        $redirect_url = isset( $options['redirect_url'] ) ? trim( $options['redirect_url'] ) : '';
+        
+        if ( ! empty( $redirect_url ) ) {
+            // Ha van átirányítás, nem mutatjuk a sablont, hanem eldobjuk a megadott URL-re (302 ideiglenes)
+            wp_redirect( $redirect_url, 302 );
+            exit;
+        }
+
         $this->render_maintenance_page( $options, $is_specific_mode );
     }
 
