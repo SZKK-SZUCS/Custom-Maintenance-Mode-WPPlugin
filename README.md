@@ -4,7 +4,7 @@
 **Requires at least:** 5.8
 **Tested up to:** 6.4
 **Requires PHP:** 7.4
-**Stable tag:** 1.1.11
+**Stable tag:** 1.1.12
 **License:** GPLv2 or later
 
 ## Description
@@ -50,7 +50,11 @@ A bővítmény a háttérben automatikusan ellenőrzi a GitHub kiadásokat (Rele
 
 ## Changelog
 
-### 1.1.10
+### 1.1.12
+
+- Redirection to url
+
+### 1.1.11
 
 - Role management added to enable other roles to bypass
 
