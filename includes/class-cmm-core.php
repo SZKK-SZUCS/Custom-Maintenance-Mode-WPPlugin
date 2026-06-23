@@ -21,6 +21,23 @@ class CMM_Core {
     }
 
     public function disable_rest_api( $access ) {
+        // Ha valami miatt a WordPress már hibát dobott volna előttünk, ne írjuk felül
+        if ( is_wp_error( $access ) ) {
+            return $access;
+        }
+
+        // --- GOLYÓÁLLÓ BYPASS AZ API-K SZÁMÁRA ---
+        // 1. MSDL API (Child plugin token)
+        if ( isset( $_SERVER['HTTP_X_MSDL_API_KEY'] ) || isset( $_SERVER['HTTP_X_MSDL_CHILD_DOMAIN'] ) ) {
+            return $access;
+        }
+        
+        // 2. SZEducate API (Hub-Kliens szinkronizáció Bearer tokenje vagy Backup cron token)
+        if ( isset( $_SERVER['HTTP_AUTHORIZATION'] ) || isset( $_SERVER['HTTP_X_BACKUP_TOKEN'] ) || isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
+            return $access;
+        }
+        // ------------------------------------------
+
         $options = get_option( 'cmm_settings' );
         
         if ( ! empty( $options['is_active'] ) ) {
