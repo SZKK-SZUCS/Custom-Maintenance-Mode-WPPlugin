@@ -15,13 +15,23 @@ class CMM_Frontend {
             return;
         }
 
-        // B) REST API kérések átengedése (a /wp-json/ kérések nem lehetnek karbantartás alatt)
-        $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
-        if ( strpos( $request_uri, '/wp-json/' ) !== false || strpos( $request_uri, 'rest_route' ) !== false ) {
+        // ÚJ: B) SZEducate API Fejlécek (Hub-Kliens szinkronizáció és Biztonsági mentés átengedése)
+        // A kliensek 'Authorization: Bearer <token>' fejléccel jönnek, a backup cron pedig 'X-Backup-Token'-nel
+        if ( isset( $_SERVER['HTTP_AUTHORIZATION'] ) || isset( $_SERVER['HTTP_X_BACKUP_TOKEN'] ) ) {
+            return;
+        }
+        // (Néhány szerverkörnyezetben a HTTP_AUTHORIZATION helyett REDIRECT_HTTP_AUTHORIZATION jelenik meg)
+        if ( isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
             return;
         }
 
-        // C) Referer alapú SZE.HU domain engedélyezés
+        // C) REST API kérések átengedése (a /wp-json/ kérések nem lehetnek karbantartás alatt)
+        $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
+        if ( strpos( $request_uri, '/wp-json/' ) !== false || strpos( $request_uri, 'rest_route' ) !== false || strpos( $request_uri, 'szeducate' ) !== false ) {
+            return;
+        }
+
+        // D) Referer alapú SZE.HU domain engedélyezés
         if ( isset( $_SERVER['HTTP_REFERER'] ) && strpos( $_SERVER['HTTP_REFERER'], '.sze.hu' ) !== false ) {
             return;
         }
