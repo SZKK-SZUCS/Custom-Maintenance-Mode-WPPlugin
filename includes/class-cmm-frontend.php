@@ -4,40 +4,38 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class CMM_Frontend {
     public function init() {
-        add_action( 'template_redirect', array( $this, 'maintenance_mode_redirect' ) );
+        add_action( 'template_redirect', array( $this, 'maintenance_mode_redirect' ), 1 );
     }
 
     public function maintenance_mode_redirect() {
-        // --- 1. ABSZOLÚT GOLYÓÁLLÓ BYPASS (Azonnali kilépés) ---
+        $options = get_option( 'cmm_settings' );
+
+        if ( ! empty( $options['is_active'] ) ) {
+            if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+                define( 'DONOTCACHEPAGE', true );
+            }
+            nocache_headers();
+        }
         
-        // A) MSDL API Fejlécek (Ha a Child plugin kér tokent vagy parancsot)
-        if ( isset( $_SERVER['HTTP_X_MSDL_API_KEY'] ) || isset( $_SERVER['HTTP_X_MSDL_CHILD_DOMAIN'] ) ) {
+        if ( ! empty( $_SERVER['HTTP_X_MSDL_API_KEY'] ) || ! empty( $_SERVER['HTTP_X_MSDL_CHILD_DOMAIN'] ) ) {
             return;
         }
 
-        // ÚJ: B) SZEducate API Fejlécek (Hub-Kliens szinkronizáció és Biztonsági mentés átengedése)
-        // A kliensek 'Authorization: Bearer <token>' fejléccel jönnek, a backup cron pedig 'X-Backup-Token'-nel
-        if ( isset( $_SERVER['HTTP_AUTHORIZATION'] ) || isset( $_SERVER['HTTP_X_BACKUP_TOKEN'] ) ) {
+        if ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) || ! empty( $_SERVER['HTTP_X_BACKUP_TOKEN'] ) ) {
             return;
         }
-        // (Néhány szerverkörnyezetben a HTTP_AUTHORIZATION helyett REDIRECT_HTTP_AUTHORIZATION jelenik meg)
-        if ( isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
+        if ( ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
             return;
         }
 
-        // C) REST API kérések átengedése (a /wp-json/ kérések nem lehetnek karbantartás alatt)
         $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
         if ( strpos( $request_uri, '/wp-json/' ) !== false || strpos( $request_uri, 'rest_route' ) !== false || strpos( $request_uri, 'szeducate' ) !== false ) {
             return;
         }
 
-        // D) Referer alapú SZE.HU domain engedélyezés
-        if ( isset( $_SERVER['HTTP_REFERER'] ) && strpos( $_SERVER['HTTP_REFERER'], '.sze.hu' ) !== false ) {
+        if ( ! empty( $_SERVER['HTTP_REFERER'] ) && strpos( $_SERVER['HTTP_REFERER'], '.sze.hu' ) !== false ) {
             return;
         }
-        // -------------------------------------------------------
-
-        $options = get_option( 'cmm_settings' );
 
         if ( empty( $options['is_active'] ) ) { return; }
 
@@ -54,11 +52,9 @@ class CMM_Frontend {
             $current_user = wp_get_current_user();
             $allowed_roles = isset( $options['allowed_roles'] ) && is_array( $options['allowed_roles'] ) ? $options['allowed_roles'] : array( 'administrator' );
             
-            // A felhasználó szerepköreinek és az engedélyezett szerepköröknek a metszete
             $user_roles = (array) $current_user->roles;
             $intersect = array_intersect( $allowed_roles, $user_roles );
             
-            // Ha van egyezés, vagy ha esetleg kicsuknánk az admint véletlenül, átengedjük
             if ( ! empty( $intersect ) || current_user_can( 'manage_options' ) ) {
                 return; 
             }
@@ -86,7 +82,6 @@ class CMM_Frontend {
         $redirect_url = isset( $options['redirect_url'] ) ? trim( $options['redirect_url'] ) : '';
         
         if ( ! empty( $redirect_url ) ) {
-            // Ha van átirányítás, nem mutatjuk a sablont, hanem eldobjuk a megadott URL-re (302 ideiglenes)
             wp_redirect( $redirect_url, 302 );
             exit;
         }
@@ -105,7 +100,6 @@ class CMM_Frontend {
 
         $force_bilingual = ! empty( $options['force_bilingual'] );
         
-        // Nyelv detektálása (Csak HU böngésző kap magyart, minden más EN)
         $active_lang = 'hu'; 
         if ( isset( $_SERVER['HTTP_ACCEPT_LANGUAGE'] ) && substr( $_SERVER['HTTP_ACCEPT_LANGUAGE'], 0, 2 ) !== 'hu' ) {
             $active_lang = 'en'; 
