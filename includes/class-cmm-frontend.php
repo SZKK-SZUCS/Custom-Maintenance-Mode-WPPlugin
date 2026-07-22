@@ -21,6 +21,12 @@ class CMM_Frontend {
             return;
         }
 
+        // Uptime Kuma alapból "Uptime-Kuma/<verzió>" User-Agent-et küld minden HTTP(s) monitor kérésnél
+        // (lásd: server/uptime-kuma-server.js getUserAgent()), ezt engedjük át karbantartás alatt is.
+        if ( ! empty( $_SERVER['HTTP_USER_AGENT'] ) && stripos( $_SERVER['HTTP_USER_AGENT'], 'Uptime-Kuma' ) !== false ) {
+            return;
+        }
+
         if ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) || ! empty( $_SERVER['HTTP_X_BACKUP_TOKEN'] ) ) {
             return;
         }
