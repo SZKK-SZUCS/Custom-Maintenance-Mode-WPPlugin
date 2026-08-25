@@ -18,11 +18,36 @@ class CMM_Core {
 
         add_filter( 'rest_authentication_errors', array( $this, 'disable_rest_api' ) );
         add_filter( 'xmlrpc_enabled', array( $this, 'disable_xmlrpc' ) );
+        
+        // Uptime Kuma REST API végpont regisztrálása
+        add_action( 'rest_api_init', array( $this, 'register_kuma_endpoint' ) );
+    }
+
+    public function register_kuma_endpoint() {
+        register_rest_route( 'cmm/v1', '/status', array(
+            'methods' => 'GET',
+            'callback' => array( $this, 'kuma_status_response' ),
+            'permission_callback' => '__return_true'
+        ));
+    }
+
+    public function kuma_status_response() {
+        $options = get_option( 'cmm_settings' );
+        $is_active = ! empty( $options['is_active'] ) ? true : false;
+        
+        return new WP_REST_Response( array(
+            'maintenance_active' => $is_active
+        ), 200 );
     }
 
     public function disable_rest_api( $access ) {
         // Ha valami miatt a WordPress már hibát dobott volna előttünk, ne írjuk felül
         if ( is_wp_error( $access ) ) {
+            return $access;
+        }
+
+        // Engedélyezzük az Uptime Kuma státusz lekérdezését
+        if ( isset( $_SERVER['REQUEST_URI'] ) && strpos( $_SERVER['REQUEST_URI'], '/cmm/v1/status' ) !== false ) {
             return $access;
         }
 
