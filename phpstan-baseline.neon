@@ -1,0 +1,61 @@
+parameters:
+	ignoreErrors:
+		-
+			message: "#^Call to static method buildUpdateChecker\\(\\) on an unknown class YahnisElsts\\\\PluginUpdateChecker\\\\v5\\\\PucFactory\\.$#"
+			count: 1
+			path: custom-maintenance-mode.php
+
+		-
+			message: "#^Parameter \\#3 \\$callback of function add_settings_section expects callable\\(\\)\\: mixed, null given\\.$#"
+			count: 2
+			path: includes/class-cmm-admin.php
+
+		-
+			message: "#^Constant COOKIEPATH not found\\.$#"
+			count: 1
+			path: includes/class-cmm-frontend.php
+
+		-
+			message: "#^Constant COOKIE_DOMAIN not found\\.$#"
+			count: 1
+			path: includes/class-cmm-frontend.php
+
+		-
+			message: "#^Right side of \\|\\| is always false\\.$#"
+			count: 1
+			path: includes/class-cmm-frontend.php
+
+		-
+			message: "#^Variable \\$active_lang might not be defined\\.$#"
+			count: 2
+			path: templates/maintenance-view.php
+
+		-
+			message: "#^Variable \\$footer_en might not be defined\\.$#"
+			count: 2
+			path: templates/maintenance-view.php
+
+		-
+			message: "#^Variable \\$footer_hu might not be defined\\.$#"
+			count: 2
+			path: templates/maintenance-view.php
+
+		-
+			message: "#^Variable \\$force_bilingual might not be defined\\.$#"
+			count: 1
+			path: templates/maintenance-view.php
+
+		-
+			message: "#^Variable \\$is_specific_mode might not be defined\\.$#"
+			count: 1
+			path: templates/maintenance-view.php
+
+		-
+			message: "#^Variable \\$text_en might not be defined\\.$#"
+			count: 2
+			path: templates/maintenance-view.php
+
+		-
+			message: "#^Variable \\$text_hu might not be defined\\.$#"
+			count: 2
+			path: templates/maintenance-view.php

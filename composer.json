@@ -18,6 +18,7 @@
     "scripts": {
         "lint": "phpcs",
         "lint:fix": "phpcbf",
-        "stan": "phpstan analyse"
+        "stan": "phpstan analyse --memory-limit=1G",
+        "stan:baseline": "phpstan analyse --memory-limit=1G --generate-baseline"
     }
 }
