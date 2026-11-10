@@ -27,6 +27,11 @@ class CMM_Frontend {
             return;
         }
 
+        // SZEducate Hub -> Kliens hívások egyedi tokenfejléce (lásd class-cmm-core.php, disable_rest_api)
+        if ( ! empty( $_SERVER['HTTP_X_SZEDUCATE_AUTH'] ) ) {
+            return;
+        }
+
         if ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) || ! empty( $_SERVER['HTTP_X_BACKUP_TOKEN'] ) ) {
             return;
         }

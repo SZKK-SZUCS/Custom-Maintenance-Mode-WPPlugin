@@ -61,6 +61,13 @@ class CMM_Core {
         if ( isset( $_SERVER['HTTP_AUTHORIZATION'] ) || isset( $_SERVER['HTTP_X_BACKUP_TOKEN'] ) || isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
             return $access;
         }
+
+        // 3. SZEducate Hub -> Kliens hívások (ping, sync, sync-course-batch): ezek NEM Authorization,
+        // hanem egyedi X-SZEducate-Auth fejlécben viszik a tokent. A tényleges hitelesítést a szeducate
+        // plugin végzi a saját permission_callback-jében, itt csak a karbantartás-kaput nyitjuk meg.
+        if ( ! empty( $_SERVER['HTTP_X_SZEDUCATE_AUTH'] ) ) {
+            return $access;
+        }
         // ------------------------------------------
 
         $options = get_option( 'cmm_settings' );
