@@ -16,6 +16,10 @@ class CMM_Core {
         $frontend = new CMM_Frontend();
         $frontend->init();
 
+		// Devtracker-jelentő (konfiguráció nélkül inaktív, nem regisztrál semmit).
+		$devtracker = new CMM_Devtracker();
+		$devtracker->init();
+
         add_filter( 'rest_authentication_errors', array( $this, 'disable_rest_api' ) );
         add_filter( 'xmlrpc_enabled', array( $this, 'disable_xmlrpc' ) );
         

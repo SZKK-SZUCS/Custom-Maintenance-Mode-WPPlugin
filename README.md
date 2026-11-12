@@ -4,7 +4,7 @@
 **Requires at least:** 5.8
 **Tested up to:** 6.4
 **Requires PHP:** 7.4
-**Stable tag:** 1.1.18
+**Stable tag:** 1.2.0
 **License:** GPLv2 or later
 
 ## Description
@@ -48,7 +48,32 @@ Az admin felületen, a "Módosítások mentése" gomb mellett található egy "A
 
 A bővítmény a háttérben automatikusan ellenőrzi a GitHub kiadásokat (Releases). Ha azonnal szeretnéd ellenőrizni, a **Beállítások -> Karbantartás** oldalon kattints a "Frissítések keresése" gombra.
 
+## Devtracker-jelentő (1.2.0)
+
+Naponta egyszer, oldalanként összesített számokat küld a devtracker backendnek: hány tartalmat módosított a csapat az oldalon aznap (oldal, bejegyzés, sablon, menü, egyéb), és hány frissítés (plugin, téma, mag) történt. A plugin telepítésekor azonnal bejelenti az oldalt is.
+
+**Bekötés.** A backend címe és kulcsa csak a `wp-config.php`-ból (vagy a `cmm_dt_url` / `cmm_dt_key` opcióból) jöhet, a repóba sosem kerül:
+
+```php
+define( 'DEVTRACKER_URL', '...' ); // https:// (fejlesztéshez http://localhost)
+define( 'DEVTRACKER_KEY', '...' );
+```
+
+Ha bármelyik hiányzik, a funkció teljesen inaktív (nincs horog, nincs cron, nincs opció), a plugin úgy működik, mint az 1.1.17. Az engedélyezett felhasználónevek listáját a backend adja a válaszban (`cmm_dt_wp_users`), a `DEVTRACKER_USERS` konstans (vesszővel elválasztva) felülírhatja. Üres lista esetén semmit nem számol.
+
+**Adatvédelem.** A jelentés csak számokat és az oldal nyilvános adatait (azonosító, cím, név, verziók) tartalmazza. Nem kerül bele felhasználónév, e-mail, bejegyzés-azonosító, cím, URL, tartalom, IP.
+
+**Hogyan számol.**
+
+- *Tartalom:* a nap során módosított **különböző** tartalmak száma (ugyanannak az oldalnak a tíz mentése 1). Csak az engedélyezett felhasználó (mentéskor bejelentkezett `user_login`) módosítása számít; cron, WP-CLI és rendszerfolyamat nem. Kizárt: revízió, automatikus mentés, `auto-draft`, média, és minden `show_ui = false` típus (a lista a `cmm_dt_excluded_post_types` szűrővel módosítható). A sablon-típusok (`elementor_library`, `wp_template`, `wp_template_part`) a `show_ui`-kizárás alól mentesek, a `wp_navigation` (blokkos menü) a `menu` vödörbe számít. A napváltás `Europe/Budapest` szerint van.
+- *Frissítés:* nem horogra, hanem **verzió-különbségre** épül: a plugin elmenti a telepített verziókat, és ha egy verzió megnőtt, az +1. Így mindegy, ki indította a frissítést (MainWP, WP-CLI, automatikus, kézi), és nincs kettős számolás. Ismert, elfogadott pontatlanság: ha ugyanaz az elem két ellenőrzés között két frissítést kap, az 1-nek számít. Az első futás csak alapállapotot ment, új elemet nem számol frissítésnek, visszalépést (kisebb verzió) sem.
+- *Küldés:* napi cron (`cmm_dt_daily`), a lezárt napokat küldi. Hiba esetén 15 perc, 1 óra, 6 óra múlva újrapróbál, utána a következő napi futásra vár; a függő napokat nem veszíti el (legfeljebb 60 napot tart meg). Az adminban (legfeljebb 6 óránként) pótolja a kimaradt küldést. A Beállítások → Karbantartás oldalon egy csak olvasható „Tracker” blokk mutatja az állapotot, és van „Küldés most” gomb.
+
 ## Changelog
+
+### 1.2.0
+
+- Új: devtracker-jelentő (napi összesített tartalom- és frissítésszámok, oldal automatikus bejelentése). Konfiguráció nélkül inaktív.
 
 ### 1.1.18
 

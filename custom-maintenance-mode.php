@@ -3,7 +3,7 @@
  * Plugin Name: SZE - Custom Maintenance Mode
  * Plugin URI: https://github.com/SZKK-SZUCS/Custom-Maintenance-Mode-WPPlugin
  * Description: Egyedi karbantartás mód plugin a telepítés idejére, valamint a későbbi karbantartási időszakokra.
- * Version: 1.1.18
+ * Version: 1.2.0
  * Author: Műszaki Fejlesztési és Üzemeltetési Igazgatóság
  * Author URI: https://www.uni.sze.hu/
  * Text Domain: custom-maintenance-mode
@@ -14,6 +14,8 @@
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
+// A fejlécben lévő Version-nel együtt léptetendő (a devtracker-jelentés ezt küldi a backendnek).
+define( 'CMM_VERSION', '1.2.0' );
 // Plugin Update Checker integráció
 require_once plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
@@ -51,10 +53,15 @@ function cmm_activate_plugin() {
     );
     
     add_option( 'cmm_settings', $default_options );
+
+	// Devtracker-bejelentkezés ütemezése (konfiguráció nélkül nem csinál semmit).
+	CMM_Devtracker::on_activation();
 }
 register_activation_hook( __FILE__, 'cmm_activate_plugin' );
+register_deactivation_hook( __FILE__, array( 'CMM_Devtracker', 'on_deactivation' ) );
 
 // Fő fájl betöltése és inicializálás
+require_once plugin_dir_path( __FILE__ ) . 'includes/class-cmm-devtracker.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/class-cmm-core.php';
 
 add_action( 'plugins_loaded', 'cmm_init_plugin' );

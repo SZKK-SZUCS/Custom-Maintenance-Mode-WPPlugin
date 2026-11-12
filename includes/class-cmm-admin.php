@@ -244,6 +244,8 @@ class CMM_Admin {
                     <a href="<?php echo esc_url( $reset_url ); ?>" class="button button-secondary" onclick="return confirm('Biztosan visszaállítod az alapértelmezett beállításokat? Minden eddigi módosítás elvész!');" style="color: #d63638; border-color: #d63638;">Alapértelmezett értékek visszaállítása</a>
                 </p>
             </form>
+
+			<?php CMM_Devtracker::render_admin_block(); ?>
         </div>
 
         <script>
