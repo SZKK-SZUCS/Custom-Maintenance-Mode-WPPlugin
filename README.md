@@ -65,6 +65,8 @@ define( 'DEVTRACKER_KEY', '...' );
 
 Ha bármelyik hiányzik, a funkció teljesen inaktív (nincs horog, nincs cron, nincs opció), a plugin úgy működik, mint az 1.1.17. Az engedélyezett felhasználónevek listáját a backend adja a válaszban (`cmm_dt_wp_users`), a `DEVTRACKER_USERS` konstans (vesszővel elválasztva) felülírhatja. Üres lista esetén semmit nem számol.
 
+**Klón és staging.** Az oldal azonosítója egy véletlen UUID, mellé a gépnév (a `home_url()` gépneve, kisbetűs, port nélkül) is mentődik. Ha az adatbázist átmásolják egy másik gépnévre, a másolat új azonosítót kap, és nem örökli az eredeti el nem küldött napjait. Ismert korlát: ha egy oldal `wp-config.php`-ban a `WP_HOME`-ot a kérés gépneve alapján állítja, vagy ugyanazt az adatbázist két gépnév alatt egyszerre használják, az azonosító gépnévváltásonként újra cserélődik.
+
 **Adatvédelem.** A jelentés csak számokat és az oldal nyilvános adatait (azonosító, cím, név, verziók) tartalmazza. Nem kerül bele felhasználónév, e-mail, bejegyzés-azonosító, cím, URL, tartalom, IP.
 
 **Hogyan számol.**
@@ -77,6 +79,7 @@ Ha bármelyik hiányzik, a funkció teljesen inaktív (nincs horog, nincs cron, 
 
 ### 1.2.1
 
+- Fix: a devtracker-jelentő kezeli a klónozott és a staging oldalakat. Az azonosító mellé a gépnév is mentődik (`cmm_dt_site_host`); ha az óránkénti ellenőrzésen, a napi cron elején vagy küldés előtt a gépnév eltér, az oldal új azonosítót kap, az örökölt függő napok és a mai azonosítóhalmazok törlődnek, a verzió-pillanatkép marad, és gyors bejelentkezés indul. Így az eredeti és a másolat nem ír felül egymás számait. Gépnév-váltás (staging -> éles, a `www` eltűnése) szándékosan új oldal a trackerben. Az 1.2.1 előtt már klónozott oldalon a mostani gépnév lesz az alap, ott a `cmm_dt_site_uuid` opciót kézzel kell törölni.
 - Fix: a „Frissítések keresése" 403-mal bukhatott, ha az anonim GitHub API-limit (60 kérés/óra/IP) elfogyott. Opcionális `CMM_GITHUB_TOKEN` konstans a `wp-config.php`-ban: ha meg van adva, a frissítésellenőrzés tokennel megy (5000 kérés/óra). Token nélkül nincs változás.
 
 ### 1.2.0
