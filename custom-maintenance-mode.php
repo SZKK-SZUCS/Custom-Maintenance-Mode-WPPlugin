@@ -3,7 +3,7 @@
  * Plugin Name: SZE - Custom Maintenance Mode
  * Plugin URI: https://github.com/SZKK-SZUCS/Custom-Maintenance-Mode-WPPlugin
  * Description: Egyedi karbantartás mód plugin a telepítés idejére, valamint a későbbi karbantartási időszakokra.
- * Version: 1.2.0
+ * Version: 1.2.1
  * Author: Műszaki Fejlesztési és Üzemeltetési Igazgatóság
  * Author URI: https://www.uni.sze.hu/
  * Text Domain: custom-maintenance-mode
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 // A fejlécben lévő Version-nel együtt léptetendő (a devtracker-jelentés ezt küldi a backendnek).
-define( 'CMM_VERSION', '1.2.0' );
+define( 'CMM_VERSION', '1.2.1' );
 // Plugin Update Checker integráció
 require_once plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
@@ -27,6 +27,12 @@ $cmm_update_checker = PucFactory::buildUpdateChecker(
     'custom-maintenance-mode'
 );
 $cmm_update_checker->setBranch('main');
+
+// Az anonim GitHub API-limit (60 kérés/óra/IP) több, egy IP mögötti oldalnál gyorsan elfogy (403).
+// Opcionális token a wp-config.php-ból: 5000 kérés/óra. A token nem kerülhet a kódba vagy a repóba.
+if ( defined( 'CMM_GITHUB_TOKEN' ) && is_string( constant( 'CMM_GITHUB_TOKEN' ) ) && '' !== trim( constant( 'CMM_GITHUB_TOKEN' ) ) ) {
+	$cmm_update_checker->setAuthentication( trim( constant( 'CMM_GITHUB_TOKEN' ) ) );
+}
 
 /**
  * Plugin aktiválásakor lefutó metódus.

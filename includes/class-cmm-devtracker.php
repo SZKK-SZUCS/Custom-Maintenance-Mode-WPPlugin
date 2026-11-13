@@ -42,6 +42,7 @@ class CMM_Devtracker {
 	const OPT_URL       = 'cmm_dt_url';
 	const OPT_KEY       = 'cmm_dt_key';
 	const OPT_SITE_UUID = 'cmm_dt_site_uuid';
+	const OPT_SITE_HOST = 'cmm_dt_site_host';
 	const OPT_USERS     = 'cmm_dt_wp_users';
 	const OPT_VERSIONS  = 'cmm_dt_versions';
 	const OPT_STATE     = 'cmm_dt_state';
@@ -161,7 +162,18 @@ class CMM_Devtracker {
 	}
 
 	/**
-	 * Az oldal stabil azonosítója (véletlen UUID). Az első szükséges pillanatban jön létre, és soha nem íródik felül.
+	 * Az oldal aktuális gépneve (a home_url() gépneve, kisbetűs, port és útvonal nélkül). Üres, ha nem állapítható meg.
+	 *
+	 * @return string
+	 */
+	private static function current_host() {
+		$host = wp_parse_url( home_url(), PHP_URL_HOST );
+		return is_string( $host ) ? strtolower( $host ) : '';
+	}
+
+	/**
+	 * Az oldal stabil azonosítója (véletlen UUID). Az első szükséges pillanatban jön létre, mellé mentődik a gépnév,
+	 * amelyen készült. Ez a függvény sosem írja felül: az egyetlen kivétel a klón-észlelés (reset_identity).
 	 *
 	 * @return string
 	 */
@@ -178,7 +190,79 @@ class CMM_Devtracker {
 				return $existing;
 			}
 		}
+		$host = self::current_host();
+		if ( '' !== $host ) {
+			update_option( self::OPT_SITE_HOST, $host, false );
+		}
 		return $uuid;
+	}
+
+	/**
+	 * Klón / áthelyezett másolat észlelése: ha az aktuális gépnév eltér a mentettől, az oldal új oldalnak számít.
+	 *
+	 * A klón az adatbázissal együtt örökli az azonosítót és az eredeti el nem küldött napjait is, így az eredeti és a
+	 * másolat ugyanazzal az azonosítóval jelentene és felülírná egymás számait. Gépnév-váltás (staging -> éles,
+	 * a www eltűnése) szándékosan szintén új oldal: nincs adatütközés, az elavult bejegyzést a backend admin
+	 * kapcsolja ki. Egyezés esetén semmi nem változik.
+	 *
+	 * Korlát: az 1.2.1 előtt már klónozott oldalnál nincs mentett gépnév, ott a mostani gépnév lesz az alap, az
+	 * azonosító marad (a klónon a cmm_dt_site_uuid opciót kézzel kell törölni).
+	 *
+	 * @return void
+	 */
+	public function check_site_identity() {
+		if ( ! self::is_configured() ) {
+			return;
+		}
+		$host = self::current_host();
+		if ( '' === $host ) {
+			return;
+		}
+		$saved = get_option( self::OPT_SITE_HOST, '' );
+		if ( ! is_string( $saved ) || '' === $saved ) {
+			// 1.2.0-ról frissített oldal (van azonosító, nincs gépnév): a mostani gépnév az alap.
+			update_option( self::OPT_SITE_HOST, $host, false );
+			return;
+		}
+		if ( $saved === $host ) {
+			return;
+		}
+		self::reset_identity( $host );
+	}
+
+	/**
+	 * Új azonosító egy klónnak: az örökölt függő napok és a mai azonosítóhalmazok (cmm_dt_state) törlődnek,
+	 * a verzió-pillanatkép marad (a klón verziói ugyanazok), és gyors bejelentkezés (days: []) indul.
+	 *
+	 * @param string $host Az új gépnév.
+	 * @return void
+	 */
+	private static function reset_identity( $host ) {
+		delete_option( self::OPT_STATE );
+		// Az örökölt ütemezett események és zár az eredeti oldalé volt.
+		wp_clear_scheduled_hook( self::CRON_RETRY );
+		wp_clear_scheduled_hook( self::CRON_REGISTER );
+		wp_clear_scheduled_hook( self::CRON_DAILY );
+		delete_transient( self::TRANSIENT_LOCK );
+
+		// Itt az egyetlen hely, ahol az azonosító felülíródik. A gépnév utoljára mentődik: ha a folyamat közben
+		// megszakad, a következő ellenőrzés újra észleli az eltérést, és nem marad az eredeti azonosítóval a klón.
+		update_option( self::OPT_SITE_UUID, wp_generate_uuid4(), false );
+		self::update_status(
+			array(
+				'last_success'    => 0,
+				'last_attempt'    => 0,
+				'last_error'      => '',
+				'last_error_time' => 0,
+				'retry_step'      => 0,
+				'reg_scheduled'   => 0,
+			)
+		);
+		update_option( self::OPT_SITE_HOST, $host, false );
+
+		// A napi cron az új azonosítóból számolt eltolással ütemeződik újra.
+		self::ensure_daily_scheduled();
+		self::schedule_registration();
 	}
 
 	/**
@@ -529,6 +613,8 @@ class CMM_Devtracker {
 			return;
 		}
 		set_transient( self::TRANSIENT_VCHECK, 1, HOUR_IN_SECONDS );
+		// Előbb az azonosító: a klón törli az örökölt állapotot, és csak utána számolhat frissítést.
+		$this->check_site_identity();
 		$this->check_versions();
 
 		// Meglévő oldalon az 1.2.0-ra frissítés után az első konfigurált pillanatban bejelentkezés.
@@ -662,6 +748,7 @@ class CMM_Devtracker {
 	 * @return void
 	 */
 	public function cron_daily() {
+		$this->check_site_identity();
 		$this->check_versions();
 		$this->send_report( true );
 	}
@@ -769,6 +856,9 @@ class CMM_Devtracker {
 		if ( ! self::is_configured() ) {
 			return false;
 		}
+		// Küldés előtt is: a klón az adatbázissal az óránkénti kaput (transient) is örökli, így az első órában
+		// egy admin-pótlás vagy kézi küldés még az eredeti azonosítóval és napjaival menne el.
+		$this->check_site_identity();
 		if ( false !== get_transient( self::TRANSIENT_LOCK ) ) {
 			return false;
 		}

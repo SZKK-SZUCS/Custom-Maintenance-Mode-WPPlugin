@@ -4,7 +4,7 @@
 **Requires at least:** 5.8
 **Tested up to:** 6.4
 **Requires PHP:** 7.4
-**Stable tag:** 1.2.0
+**Stable tag:** 1.2.1
 **License:** GPLv2 or later
 
 ## Description
@@ -48,6 +48,10 @@ Az admin felületen, a "Módosítások mentése" gomb mellett található egy "A
 
 A bővítmény a háttérben automatikusan ellenőrzi a GitHub kiadásokat (Releases). Ha azonnal szeretnéd ellenőrizni, a **Beállítások -> Karbantartás** oldalon kattints a "Frissítések keresése" gombra.
 
+### Mit jelent a „GitHub API error ... HTTP status code: 403" a frissítés keresésekor?
+
+Az anonim GitHub API-limit (60 kérés óránként IP-címenként) elfogyott, ami több, közös kimenő IP mögötti oldalnál gyakori. Várj a limit visszaállására (legfeljebb egy óra), vagy add meg a `wp-config.php`-ban a `CMM_GITHUB_TOKEN` konstanst egy GitHub-tokennel (a publikus repó olvasásához jogosultság nélküli token elég), ekkor a limit 5000 kérés/óra. A tokent sosem szabad a repóba tenni.
+
 ## Devtracker-jelentő (1.2.0)
 
 Naponta egyszer, oldalanként összesített számokat küld a devtracker backendnek: hány tartalmat módosított a csapat az oldalon aznap (oldal, bejegyzés, sablon, menü, egyéb), és hány frissítés (plugin, téma, mag) történt. A plugin telepítésekor azonnal bejelenti az oldalt is.
@@ -61,6 +65,8 @@ define( 'DEVTRACKER_KEY', '...' );
 
 Ha bármelyik hiányzik, a funkció teljesen inaktív (nincs horog, nincs cron, nincs opció), a plugin úgy működik, mint az 1.1.17. Az engedélyezett felhasználónevek listáját a backend adja a válaszban (`cmm_dt_wp_users`), a `DEVTRACKER_USERS` konstans (vesszővel elválasztva) felülírhatja. Üres lista esetén semmit nem számol.
 
+**Klón és staging.** Az oldal azonosítója egy véletlen UUID, mellé a gépnév (a `home_url()` gépneve, kisbetűs, port nélkül) is mentődik. Ha az adatbázist átmásolják egy másik gépnévre, a másolat új azonosítót kap, és nem örökli az eredeti el nem küldött napjait. Ismert korlát: ha egy oldal `wp-config.php`-ban a `WP_HOME`-ot a kérés gépneve alapján állítja, vagy ugyanazt az adatbázist két gépnév alatt egyszerre használják, az azonosító gépnévváltásonként újra cserélődik.
+
 **Adatvédelem.** A jelentés csak számokat és az oldal nyilvános adatait (azonosító, cím, név, verziók) tartalmazza. Nem kerül bele felhasználónév, e-mail, bejegyzés-azonosító, cím, URL, tartalom, IP.
 
 **Hogyan számol.**
@@ -70,6 +76,11 @@ Ha bármelyik hiányzik, a funkció teljesen inaktív (nincs horog, nincs cron, 
 - *Küldés:* napi cron (`cmm_dt_daily`), a lezárt napokat küldi. Hiba esetén 15 perc, 1 óra, 6 óra múlva újrapróbál, utána a következő napi futásra vár; a függő napokat nem veszíti el (legfeljebb 60 napot tart meg). Az adminban (legfeljebb 6 óránként) pótolja a kimaradt küldést. A Beállítások → Karbantartás oldalon egy csak olvasható „Tracker” blokk mutatja az állapotot, és van „Küldés most” gomb.
 
 ## Changelog
+
+### 1.2.1
+
+- Fix: a devtracker-jelentő kezeli a klónozott és a staging oldalakat. Az azonosító mellé a gépnév is mentődik (`cmm_dt_site_host`); ha az óránkénti ellenőrzésen, a napi cron elején vagy küldés előtt a gépnév eltér, az oldal új azonosítót kap, az örökölt függő napok és a mai azonosítóhalmazok törlődnek, a verzió-pillanatkép marad, és gyors bejelentkezés indul. Így az eredeti és a másolat nem ír felül egymás számait. Gépnév-váltás (staging -> éles, a `www` eltűnése) szándékosan új oldal a trackerben. Az 1.2.1 előtt már klónozott oldalon a mostani gépnév lesz az alap, ott a `cmm_dt_site_uuid` opciót kézzel kell törölni.
+- Fix: a „Frissítések keresése" 403-mal bukhatott, ha az anonim GitHub API-limit (60 kérés/óra/IP) elfogyott. Opcionális `CMM_GITHUB_TOKEN` konstans a `wp-config.php`-ban: ha meg van adva, a frissítésellenőrzés tokennel megy (5000 kérés/óra). Token nélkül nincs változás.
 
 ### 1.2.0
 
