@@ -4,7 +4,7 @@
 **Requires at least:** 5.8
 **Tested up to:** 6.4
 **Requires PHP:** 7.4
-**Stable tag:** 1.2.1
+**Stable tag:** 1.3.0
 **License:** GPLv2 or later
 
 ## Description
@@ -75,7 +75,33 @@ Ha bármelyik hiányzik, a funkció teljesen inaktív (nincs horog, nincs cron, 
 - *Frissítés:* nem horogra, hanem **verzió-különbségre** épül: a plugin elmenti a telepített verziókat, és ha egy verzió megnőtt, az +1. Így mindegy, ki indította a frissítést (MainWP, WP-CLI, automatikus, kézi), és nincs kettős számolás. Ismert, elfogadott pontatlanság: ha ugyanaz az elem két ellenőrzés között két frissítést kap, az 1-nek számít. Az első futás csak alapállapotot ment, új elemet nem számol frissítésnek, visszalépést (kisebb verzió) sem.
 - *Küldés:* napi cron (`cmm_dt_daily`), a lezárt napokat küldi. Hiba esetén 15 perc, 1 óra, 6 óra múlva újrapróbál, utána a következő napi futásra vár; a függő napokat nem veszíti el (legfeljebb 60 napot tart meg). Az adminban (legfeljebb 6 óránként) pótolja a kimaradt küldést. A Beállítások → Karbantartás oldalon egy csak olvasható „Tracker” blokk mutatja az állapotot, és van „Küldés most” gomb.
 
+## Oldal-frissesség és karbantartási állapot (1.3.0)
+
+A devtracker-jelentő két új dolgot hordoz. Ugyanúgy csak bekötött (`DEVTRACKER_URL` + `DEVTRACKER_KEY`) oldalon él: bekötés nélkül nincs horog, cron, új opció és admin blokk.
+
+**Mit küld.** A jelentés (`schema` marad 1, a mezők additívak) minden küldésben (napi, bejelentkezés, „Küldés most", pótló küldés) két új legfelső szintű mezőt kap:
+
+- `maintenance` (logikai): a karbantartás mód aktuális állapota. Önjavítás: az elveszett jelzést, vagy az adatbázisból szerkesztett állapotot a következő jelentés rendbe teszi.
+- `maintenance_changed_at` (UTC ISO 8601): az utolsó, a plugin által észlelt váltás ideje. Ha még nem volt váltás, a mező kimarad.
+- `freshness`: `last_content_change` (a legutóbbi módosítás napja `Europe/Budapest` szerint, **bárki** módosítását számítva, üres halmaznál `null`), `published` (a mérési halmaz mérete) és `stale` (közülük hány nem módosult a küszöb ideje óta). Ha a pillanatkép nem számolható, a mező **kimarad** (a „nincs adat" nem 0).
+
+**Mit NEM küld.** Nincs benne cím, URL, bejegyzés-azonosító, felhasználónév, tartalom, IP, és **az elavult oldalak listája sem**: az csak a WordPress adminban látszik. A kulcs és a backend címe a hibaszövegekbe és az admin felületre sem kerül.
+
+**A mérési halmaz.** `publish` állapotú `page`, `post`, `elementor_library`, `wp_template`, `wp_template_part`. A lista a `cmm_dt_freshness_post_types` szűrővel módosítható; a jelentés és az admin lista ugyanazt a függvényt használja. Nem számít bele: az egyéni típusok (pl. kurzus: a tömeges mentésük bármit frissnek mutatna), menü, média, revízió, automatikus mentés, vázlat, privát tartalom. Az **Elementor „kit"** (`_elementor_template_type = kit`, az oldal globális beállításai) nem tartalom, ezért **kizárt**. Hibás, nullás (`0000-00-00`) módosítási dátumú sornál a közzétételi dátum (`post_date_gmt`) számít; ha az is hiányzik, a sor a `published`-ben benne van, de a `last_content_change` és a `stale` számításból kimarad.
+
+**A küszöb.** A tracker adja a jelentés válaszának `config.stale_days` mezőjében, a plugin 30-365 közé vágja (a határon kívüli értéket a határra), a `cmm_dt_stale_days` opcióba menti, és a következő jelentés ezzel számol. Amíg a tracker nem küldött értéket, az alapérték 90 (`CMM_Devtracker_Freshness::DEFAULT_STALE_DAYS`). Ha egy későbbi válaszból hiányzik vagy érvénytelen a mező, a korábban mentett érték marad.
+
+**Elavult oldalak lista.** A Beállítások → Karbantartás oldal „Tracker" blokkja alatt, csak `manage_options` jogosultsággal: ugyanaz a halmaz és küszöb, a legrégebbi elöl, legfeljebb 200 sor (az összes darabszám felette), cím, típus, utolsó módosítás napja, szerkesztés link.
+
+**A ping.** Ha a `cmm_settings['is_active']` **értéke változik** (admin mentés, „Alapértelmezett értékek visszaállítása", bármilyen más `update_option`), a plugin a kérés végén egyszer `POST {DEVTRACKER_URL}/api/v1/wp/status` jelzést küld (5 s időkorlát, átirányítás nélkül, `{"schema":1,"site_uuid":...,"maintenance":...,"changed_at":...}`). Más beállítás mentése nem küld semmit. A ping nem blokkolja a mentést: FastCGI-n a válasz lezárása után megy, egyébként (pl. `mod_php`) egyszeri cron-eseményre bízza, így az admin sosem vár a hálózatra. Minden nem 2xx választ és hibát csendben eltűr, nincs újrapróba és admin hibaüzenet, mert a következő napi jelentés `maintenance` mezője úgyis helyreállít. Az eredmény rövid szövege a `cmm_dt_ping` opcióba kerül (a Tracker blokkban látszik). Amíg az oldal sosem jelentett sikeresen, nem megy ping (a tracker még nem ismeri): ilyenkor a bejelentkezési jelentés `maintenance` mezője viszi az állapotot. A ping nem függ a karbantartás módtól. Az új oldalak karbantartásban indulnak: az aktiválás `is_active = 1`-et ír, ez nem számít váltásnak.
+
 ## Changelog
+
+### 1.3.0
+
+- Új: a devtracker-jelentés oldal-frissesség pillanatképet hordoz (`freshness`: utolsó tartalom-módosítás napja, közzétett és elavult tartalmak száma), a küszöböt (`stale_days`, 30-365, alap 90) a tracker adja. A konkrét elavult oldalak csak a WordPress adminban látszanak (Beállítások → Karbantartás, „Elavult oldalak").
+- Új: a jelentés hordozza a karbantartás mód aktuális állapotát (`maintenance`, `maintenance_changed_at`), a mód váltásáról pedig a plugin azonnali, csendes jelzést (`POST /api/v1/wp/status`) küld a kérés végén.
+- Konfiguráció nélkül (`DEVTRACKER_URL` + `DEVTRACKER_KEY`) minden új rész inaktív.
 
 ### 1.2.1
 

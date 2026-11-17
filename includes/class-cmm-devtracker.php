@@ -3,7 +3,9 @@
  * Devtracker-jelentő: naponta egyszer, oldalanként összesített számokat küld a devtracker backendnek.
  *
  * Két dolgot számol: hány különböző tartalmat módosított az engedélyezett csapat aznap,
- * és hány frissítés (plugin / téma / mag) történt aznap.
+ * és hány frissítés (plugin / téma / mag) történt aznap. Az 1.3.0 óta minden jelentés hordozza az oldal
+ * frissességének pillanatképét (CMM_Devtracker_Freshness) és a karbantartás mód aktuális állapotát, a
+ * karbantartás mód váltásáról pedig azonnali, csendes jelzést (ping) küld.
  *
  * Konfiguráció nélkül (DEVTRACKER_URL + DEVTRACKER_KEY, vagy cmm_dt_url + cmm_dt_key opció)
  * az egész funkció inaktív: nem regisztrál horgot, nem ütemez eseményt, nem ír opciót.
@@ -23,6 +25,8 @@ class CMM_Devtracker {
 	const SCHEMA            = 1;
 	const TIMEZONE          = 'Europe/Budapest';
 	const ENDPOINT_PATH     = '/api/v1/wp/report';
+	const PING_PATH         = '/api/v1/wp/status';
+	const PING_TIMEOUT      = 5;
 	const MAX_PENDING_DAYS  = 60;
 	const MAX_RESPONSE_SIZE = 65536;
 	const MAX_USERS         = 200;
@@ -38,6 +42,7 @@ class CMM_Devtracker {
 	const CRON_DAILY    = 'cmm_dt_daily';
 	const CRON_REGISTER = 'cmm_dt_register';
 	const CRON_RETRY    = 'cmm_dt_retry';
+	const CRON_PING     = 'cmm_dt_ping';
 
 	const OPT_URL       = 'cmm_dt_url';
 	const OPT_KEY       = 'cmm_dt_key';
@@ -48,9 +53,22 @@ class CMM_Devtracker {
 	const OPT_STATE     = 'cmm_dt_state';
 	const OPT_STATUS    = 'cmm_dt_status';
 
+	// A karbantartás mód legutóbbi, általunk észlelt váltásának ideje (UTC ISO 8601), és az utolsó ping eredménye.
+	// A ping eredménye szándékosan nem a cmm_dt_status tömbben van: a ping a kérés végén, a napi küldéssel
+	// párhuzamosan is futhat, és két író egy közös tömbön felülírhatná egymás (pl. last_success) értékét.
+	const OPT_MAINT_CHANGED = 'cmm_dt_maint_changed_at';
+	const OPT_PING          = 'cmm_dt_ping';
+
 	const TRANSIENT_VCHECK  = 'cmm_dt_vcheck';
 	const TRANSIENT_CATCHUP = 'cmm_dt_catchup';
 	const TRANSIENT_LOCK    = 'cmm_dt_lock';
+
+	/**
+	 * Volt-e már ping beütemezve ebben a kérésben (egy kérésben többszöri mentés is csak egy jelzést ad).
+	 *
+	 * @var bool
+	 */
+	private $ping_queued = false;
 
 	/**
 	 * Horgok regisztrálása. Konfiguráció nélkül semmit nem csinál.
@@ -77,6 +95,11 @@ class CMM_Devtracker {
 		add_action( self::CRON_RETRY, array( $this, 'cron_retry' ) );
 		add_action( 'admin_init', array( $this, 'maybe_catch_up' ) );
 		add_action( 'admin_post_cmm_dt_send_now', array( $this, 'handle_send_now' ) );
+
+		// Karbantartás mód váltása: minden írási út (admin mentés, visszaállítás, kód) ugyanazt az opciót írja.
+		add_action( 'update_option_cmm_settings', array( $this, 'on_settings_updated' ), 10, 2 );
+		add_action( 'add_option_cmm_settings', array( $this, 'on_settings_added' ), 10, 2 );
+		add_action( self::CRON_PING, array( $this, 'cron_ping' ) );
 	}
 
 	/**
@@ -101,6 +124,7 @@ class CMM_Devtracker {
 		wp_clear_scheduled_hook( self::CRON_DAILY );
 		wp_clear_scheduled_hook( self::CRON_REGISTER );
 		wp_clear_scheduled_hook( self::CRON_RETRY );
+		wp_clear_scheduled_hook( self::CRON_PING );
 	}
 
 	// ------------------------------------------------------------------
@@ -243,7 +267,10 @@ class CMM_Devtracker {
 		wp_clear_scheduled_hook( self::CRON_RETRY );
 		wp_clear_scheduled_hook( self::CRON_REGISTER );
 		wp_clear_scheduled_hook( self::CRON_DAILY );
+		wp_clear_scheduled_hook( self::CRON_PING );
 		delete_transient( self::TRANSIENT_LOCK );
+		// Az örökölt ping-eredmény az eredeti oldalé volt.
+		delete_option( self::OPT_PING );
 
 		// Itt az egyetlen hely, ahol az azonosító felülíródik. A gépnév utoljára mentődik: ha a folyamat közben
 		// megszakad, a következő ellenőrzés újra észleli az eltérést, és nem marad az eredeti azonosítóval a klón.
@@ -909,8 +936,22 @@ class CMM_Devtracker {
 			'site_name'      => get_bloginfo( 'name' ),
 			'plugin_version' => defined( 'CMM_VERSION' ) ? CMM_VERSION : '',
 			'wp_version'     => get_bloginfo( 'version' ),
-			'days'           => $days,
 		);
+
+		// A karbantartás mód aktuális állapota minden jelentésben: az elveszett ping-et, vagy az adatbázisból
+		// szerkesztett állapotot a következő jelentés rendbe teszi.
+		$payload['maintenance'] = self::maintenance_active();
+		$changed_at             = self::get_maint_changed_at();
+		if ( '' !== $changed_at ) {
+			$payload['maintenance_changed_at'] = $changed_at;
+		}
+
+		// Frissesség: a küldés pillanatában számolva. Ha nem számolható, a mező kimarad ("nincs adat" nem 0).
+		$freshness = CMM_Devtracker_Freshness::snapshot();
+		if ( null !== $freshness ) {
+			$payload['freshness'] = $freshness;
+		}
+		$payload['days'] = $days;
 
 		$response = wp_remote_post(
 			self::get_url() . self::ENDPOINT_PATH,
@@ -951,6 +992,10 @@ class CMM_Devtracker {
 		}
 		if ( isset( $data['config']['wp_users'] ) && is_array( $data['config']['wp_users'] ) ) {
 			update_option( self::OPT_USERS, self::sanitize_users( $data['config']['wp_users'] ), false );
+		}
+		// A küszöb a trackertől jön, a következő jelentés már ezzel számol.
+		if ( isset( $data['config'] ) && is_array( $data['config'] ) && array_key_exists( 'stale_days', $data['config'] ) ) {
+			CMM_Devtracker_Freshness::store_stale_days( $data['config']['stale_days'] );
 		}
 
 		// A küldés alatt változhatott az állapot, ezért a törlés előtt újra betöltjük.
@@ -998,6 +1043,169 @@ class CMM_Devtracker {
 	}
 
 	// ------------------------------------------------------------------
+	// Karbantartás állapot: jelentés-mező és azonnali jelzés (ping).
+	// ------------------------------------------------------------------
+
+	/**
+	 * A karbantartás mód aktuális állapota (a cmm_settings is_active értéke).
+	 *
+	 * @return bool
+	 */
+	private static function maintenance_active() {
+		$options = get_option( 'cmm_settings' );
+		return is_array( $options ) && ! empty( $options['is_active'] );
+	}
+
+	/**
+	 * A legutóbbi észlelt váltás ideje (UTC ISO 8601). Üres, ha még nem észleltünk váltást.
+	 *
+	 * @return string
+	 */
+	private static function get_maint_changed_at() {
+		$value = get_option( self::OPT_MAINT_CHANGED, '' );
+		if ( is_string( $value ) && 1 === preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/', $value ) ) {
+			return $value;
+		}
+		return '';
+	}
+
+	/**
+	 * Horog: a cmm_settings módosult. Csak az is_active értékének változása számít, más beállítás mentése nem.
+	 *
+	 * @param mixed $old_value Régi érték.
+	 * @param mixed $new_value Új érték.
+	 * @return void
+	 */
+	public function on_settings_updated( $old_value, $new_value ) {
+		$was = is_array( $old_value ) && ! empty( $old_value['is_active'] );
+		$is  = is_array( $new_value ) && ! empty( $new_value['is_active'] );
+		$this->handle_maintenance_change( $was, $is );
+	}
+
+	/**
+	 * Horog: a cmm_settings első létrehozása. Az új oldalak karbantartásban indulnak (az aktiválás is_active = 1-et
+	 * ír), ezért a "korábbi állapot" bekapcsolt: az 1-es létrehozás nem váltás, a 0-s igen.
+	 *
+	 * @param string $option Az opció neve.
+	 * @param mixed  $value  Az új érték.
+	 * @return void
+	 */
+	public function on_settings_added( $option, $value ) {
+		unset( $option );
+		$is = is_array( $value ) && ! empty( $value['is_active'] );
+		$this->handle_maintenance_change( true, $is );
+	}
+
+	/**
+	 * Váltás rögzítése és a jelzés beütemezése.
+	 *
+	 * @param bool $was Korábbi állapot.
+	 * @param bool $is  Új állapot.
+	 * @return void
+	 */
+	private function handle_maintenance_change( $was, $is ) {
+		if ( $was === $is ) {
+			return;
+		}
+		update_option( self::OPT_MAINT_CHANGED, gmdate( 'Y-m-d\TH:i:s\Z' ), false );
+		if ( $this->ping_queued ) {
+			return;
+		}
+		$this->ping_queued = true;
+		// A kérés végén megy, hogy a mentés ne várjon a hálózatra.
+		add_action( 'shutdown', array( $this, 'ping_on_shutdown' ) );
+	}
+
+	/**
+	 * A ping a kérés végén. Ha a szerver tudja korán lezárni a választ (FastCGI), itt küldünk, 5 s időkorláttal.
+	 * Ha nem (pl. mod_php), a küldés a válasz lezárása nélkül a mentést tartaná fel, ezért egyszeri cron-eseményre
+	 * bízzuk: a WP-Cron indítása nem blokkol. A ping nem használja a napi küldés zárját, így nem vár rá.
+	 *
+	 * @return void
+	 */
+	public function ping_on_shutdown() {
+		if ( function_exists( 'fastcgi_finish_request' ) ) {
+			ignore_user_abort( true );
+			fastcgi_finish_request();
+			$this->send_ping();
+			return;
+		}
+		wp_schedule_single_event( time(), self::CRON_PING );
+	}
+
+	/**
+	 * Cron: a ping küldése (a FastCGI nélküli út).
+	 *
+	 * @return void
+	 */
+	public function cron_ping() {
+		$this->send_ping();
+	}
+
+	/**
+	 * A ping elküldése: egyszer, újrapróba nélkül. Minden nem 2xx választ és hibát csendben eltűr: a következő
+	 * napi jelentés `maintenance` mezője úgyis helyreállítja az állapotot. Csak az eredmény rövid szövege mentődik.
+	 *
+	 * Amíg az oldal sosem jelentett sikeresen, nem megy ping: a tracker még nem ismeri (404 lenne), az állapotot
+	 * a bejelentkezési jelentés `maintenance` mezője viszi.
+	 *
+	 * @return void
+	 */
+	private function send_ping() {
+		if ( ! self::is_configured() ) {
+			return;
+		}
+		$status = self::get_status_data();
+		if ( empty( $status['last_success'] ) ) {
+			return;
+		}
+
+		$changed_at = self::get_maint_changed_at();
+		$payload    = array(
+			'schema'      => self::SCHEMA,
+			'site_uuid'   => self::get_site_uuid(),
+			'maintenance' => self::maintenance_active(),
+			'changed_at'  => '' !== $changed_at ? $changed_at : gmdate( 'Y-m-d\TH:i:s\Z' ),
+		);
+
+		$response = wp_remote_post(
+			self::get_url() . self::PING_PATH,
+			array(
+				'timeout'             => self::PING_TIMEOUT,
+				// Átirányítás követése nélkül: a Bearer kulcs nem mehet át egy másik címre.
+				'redirection'         => 0,
+				'limit_response_size' => self::MAX_RESPONSE_SIZE,
+				'headers'             => array(
+					'Authorization' => 'Bearer ' . self::get_key(),
+					'Content-Type'  => 'application/json',
+					'Accept'        => 'application/json',
+				),
+				'body'                => wp_json_encode( $payload ),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			$result = self::scrub( $response->get_error_message() );
+		} else {
+			$code = (int) wp_remote_retrieve_response_code( $response );
+			if ( $code < 200 || $code >= 300 ) {
+				$result = 'HTTP ' . $code;
+			} else {
+				$data   = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+				$result = ( is_array( $data ) && isset( $data['ok'] ) && true === $data['ok'] ) ? 'ok' : 'Érvénytelen válasz';
+			}
+		}
+		update_option(
+			self::OPT_PING,
+			array(
+				'time'   => time(),
+				'result' => $result,
+			),
+			false
+		);
+	}
+
+	// ------------------------------------------------------------------
 	// Admin felület (csak olvasható blokk).
 	// ------------------------------------------------------------------
 
@@ -1033,6 +1241,23 @@ class CMM_Devtracker {
 					<td><?php echo ! empty( $status['last_success'] ) ? esc_html( wp_date( 'Y-m-d H:i', (int) $status['last_success'] ) ) : 'még nem volt'; ?></td>
 				</tr>
 				<tr>
+					<th scope="row">Karbantartás mód</th>
+					<td><?php echo self::maintenance_active() ? 'bekapcsolva' : 'kikapcsolva'; ?></td>
+				</tr>
+				<tr>
+					<th scope="row">Utolsó állapotjelzés</th>
+					<td>
+						<?php
+						$ping = get_option( self::OPT_PING, array() );
+						if ( is_array( $ping ) && ! empty( $ping['time'] ) ) {
+							echo esc_html( wp_date( 'Y-m-d H:i', (int) $ping['time'] ) . ' (' . ( isset( $ping['result'] ) ? self::scrub( (string) $ping['result'] ) : '' ) . ')' );
+						} else {
+							echo 'még nem volt';
+						}
+						?>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row">Függő napok</th>
 					<td><?php echo esc_html( (string) self::count_pending() ); ?></td>
 				</tr>
@@ -1059,6 +1284,7 @@ class CMM_Devtracker {
 				<?php wp_nonce_field( 'cmm_dt_send_now' ); ?>
 				<?php submit_button( 'Küldés most', 'secondary', 'submit', false ); ?>
 			</form>
+			<?php CMM_Devtracker_Freshness::render_admin_section(); ?>
 		<?php endif; ?>
 		<?php
 	}
