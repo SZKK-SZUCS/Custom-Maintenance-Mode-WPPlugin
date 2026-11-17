@@ -35,13 +35,18 @@ class CMM_Devtracker_Freshness {
 	/**
 	 * A mérési halmaz post type-jai (szűrővel módosítható). A számolás és a helyi lista is ezt használja.
 	 *
-	 * Szándékosan nincs benne az egyéni típus (pl. kurzus): a tömeges mentésük bármit frissnek mutatna (ADR-0015 D8),
-	 * és nincs benne menü, média, revízió, automatikus mentés sem.
+	 * Alapból csak az oldal (1.3.1 óta): az "elavult" jelzést az oldalak tartalma indokolja (régi dátumok, megszűnt
+	 * információ). A bejegyzés nem arra való, hogy módosuljon, a sablon pedig szerkezet, nem tartalom, így mindkettő
+	 * tévesen frissnek vagy elavultnak mutatná az oldalt. Az egyéni típus (pl. kurzus) tömeges mentése pedig bármit
+	 * frissnek mutatna (ADR-0015 D8). Egy oldalnál a `cmm_dt_freshness_post_types` szűrővel bővíthető.
+	 *
+	 * Fontos: ez csak a frissességi halmazt érinti. A napi `days[].content` számlálás (az engedélyezett felhasználók
+	 * munkája) továbbra is mind az öt vödröt számolja, annak horgait ez nem érinti.
 	 *
 	 * @return string[]
 	 */
 	public static function post_types() {
-		$default  = array( 'page', 'post', 'elementor_library', 'wp_template', 'wp_template_part' );
+		$default  = array( 'page' );
 		$filtered = apply_filters( 'cmm_dt_freshness_post_types', $default );
 		if ( ! is_array( $filtered ) ) {
 			return $default;
@@ -103,8 +108,9 @@ class CMM_Devtracker_Freshness {
 	/**
 	 * A mérési halmaz WHERE feltétele, helyőrzőkkel, és a hozzá tartozó értékek.
 	 *
-	 * Kizárt: az Elementor "kit" (az oldal globális beállításai, nem tartalom), és az `eff` dátumkifejezésben a
-	 * hibás (nullás) módosítási dátumú sorok a post_date_gmt-re esnek vissza.
+	 * Kizárt: az Elementor "kit" (az oldal globális beállításai, nem tartalom; csak akkor számít, ha a szűrővel az
+	 * `elementor_library` bekerül a halmazba), és az `eff` dátumkifejezésben a hibás (nullás) módosítási dátumú
+	 * sorok a post_date_gmt-re esnek vissza.
 	 *
 	 * @param string[] $types Post type-ok (nem üres).
 	 * @return array array( string $where, array $args ).
@@ -247,25 +253,6 @@ class CMM_Devtracker_Freshness {
 	}
 
 	/**
-	 * A típus magyar felirata.
-	 *
-	 * @param string $type Post type.
-	 * @return string
-	 */
-	private static function type_label( $type ) {
-		if ( 'page' === $type ) {
-			return 'Oldal';
-		}
-		if ( 'post' === $type ) {
-			return 'Bejegyzés';
-		}
-		if ( in_array( $type, array( 'elementor_library', 'wp_template', 'wp_template_part' ), true ) ) {
-			return 'Sablon';
-		}
-		return 'Egyéb';
-	}
-
-	/**
 	 * A csak olvasható "Elavult oldalak" szakasz a Beállítások → Karbantartás oldalon.
 	 *
 	 * Csak `manage_options` jogosultsággal látszik, és semmi nem hagyja el az oldalt.
@@ -289,7 +276,7 @@ class CMM_Devtracker_Freshness {
 			<?php
 			echo esc_html(
 				sprintf(
-					'%1$d elavult a %2$d közzétett tartalomból, %3$d napos küszöb.',
+					'%1$d elavult a %2$d közzétett oldalból, %3$d napos küszöb.',
 					$list['stale'],
 					$list['published'],
 					$list['days']
@@ -301,13 +288,12 @@ class CMM_Devtracker_Freshness {
 			?>
 		</p>
 		<?php if ( empty( $list['rows'] ) ) : ?>
-			<p>Nincs elavult tartalom.</p>
+			<p>Nincs elavult oldal.</p>
 		<?php else : ?>
 			<table class="widefat striped" style="max-width: 900px;">
 				<thead>
 					<tr>
 						<th scope="col">Cím</th>
-						<th scope="col">Típus</th>
 						<th scope="col">Utolsó módosítás</th>
 						<th scope="col">Szerkesztés</th>
 					</tr>
@@ -317,7 +303,6 @@ class CMM_Devtracker_Freshness {
 						<?php $edit = get_edit_post_link( $row['id'] ); ?>
 						<tr>
 							<td><?php echo '' !== trim( $row['title'] ) ? esc_html( $row['title'] ) : '<em>(cím nélkül)</em>'; ?></td>
-							<td><?php echo esc_html( self::type_label( $row['type'] ) ); ?></td>
 							<td><?php echo esc_html( (string) $row['date'] ); ?></td>
 							<td><?php echo $edit ? '<a href="' . esc_url( $edit ) . '">Szerkesztés</a>' : '&ndash;'; ?></td>
 						</tr>

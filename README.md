@@ -4,7 +4,7 @@
 **Requires at least:** 5.8
 **Tested up to:** 6.4
 **Requires PHP:** 7.4
-**Stable tag:** 1.3.0
+**Stable tag:** 1.3.1
 **License:** GPLv2 or later
 
 ## Description
@@ -83,19 +83,24 @@ A devtracker-jelentő két új dolgot hordoz. Ugyanúgy csak bekötött (`DEVTRA
 
 - `maintenance` (logikai): a karbantartás mód aktuális állapota. Önjavítás: az elveszett jelzést, vagy az adatbázisból szerkesztett állapotot a következő jelentés rendbe teszi.
 - `maintenance_changed_at` (UTC ISO 8601): az utolsó, a plugin által észlelt váltás ideje. Ha még nem volt váltás, a mező kimarad.
-- `freshness`: `last_content_change` (a legutóbbi módosítás napja `Europe/Budapest` szerint, **bárki** módosítását számítva, üres halmaznál `null`), `published` (a mérési halmaz mérete) és `stale` (közülük hány nem módosult a küszöb ideje óta). Ha a pillanatkép nem számolható, a mező **kimarad** (a „nincs adat" nem 0).
+- `freshness`: `last_content_change` (a legutóbbi **oldal**-módosítás napja `Europe/Budapest` szerint, **bárki** módosítását számítva, üres halmaznál `null`), `published` (a közzétett oldalak száma) és `stale` (közülük hány nem módosult a küszöb ideje óta). Ha a pillanatkép nem számolható, a mező **kimarad** (a „nincs adat" nem 0).
 
 **Mit NEM küld.** Nincs benne cím, URL, bejegyzés-azonosító, felhasználónév, tartalom, IP, és **az elavult oldalak listája sem**: az csak a WordPress adminban látszik. A kulcs és a backend címe a hibaszövegekbe és az admin felületre sem kerül.
 
-**A mérési halmaz.** `publish` állapotú `page`, `post`, `elementor_library`, `wp_template`, `wp_template_part`. A lista a `cmm_dt_freshness_post_types` szűrővel módosítható; a jelentés és az admin lista ugyanazt a függvényt használja. Nem számít bele: az egyéni típusok (pl. kurzus: a tömeges mentésük bármit frissnek mutatna), menü, média, revízió, automatikus mentés, vázlat, privát tartalom. Az **Elementor „kit"** (`_elementor_template_type = kit`, az oldal globális beállításai) nem tartalom, ezért **kizárt**. Hibás, nullás (`0000-00-00`) módosítási dátumú sornál a közzétételi dátum (`post_date_gmt`) számít; ha az is hiányzik, a sor a `published`-ben benne van, de a `last_content_change` és a `stale` számításból kimarad.
+**A mérési halmaz (1.3.1 óta csak az oldal).** `publish` állapotú `page`. Az „elavult" jelzést az oldalak tartalma indokolja (régi dátumok, megszűnt információ): egy bejegyzés nem arra való, hogy módosuljon, a sablon szerkezet, nem tartalom, ezért ezek az 1.3.0-ban tévesen frissnek vagy elavultnak mutatták az oldalt. A halmaz a `cmm_dt_freshness_post_types` szűrővel egy oldalnál bővíthető (pl. `post`-tal); a jelentés és az admin lista ugyanazt a függvényt használja. Nem számít bele alapból: bejegyzés, sablon (`wp_template`, `wp_template_part`, `elementor_library`), egyéni típus (pl. kurzus: a tömeges mentése bármit frissnek mutatna), menü, média, revízió, automatikus mentés, vázlat, privát tartalom. Ha a szűrővel az `elementor_library` bekerül, az **Elementor „kit"** (az oldal globális beállításai) akkor is kizárt. Hibás, nullás (`0000-00-00`) módosítási dátumú sornál a közzétételi dátum (`post_date_gmt`) számít; ha az is hiányzik, a sor a `published`-ben benne van, de a `last_content_change` és a `stale` számításból kimarad. A napi `days[].content` számlálás (az engedélyezett felhasználók munkája) **nem változott**: továbbra is mind az öt vödröt számolja.
 
 **A küszöb.** A tracker adja a jelentés válaszának `config.stale_days` mezőjében, a plugin 30-365 közé vágja (a határon kívüli értéket a határra), a `cmm_dt_stale_days` opcióba menti, és a következő jelentés ezzel számol. Amíg a tracker nem küldött értéket, az alapérték 90 (`CMM_Devtracker_Freshness::DEFAULT_STALE_DAYS`). Ha egy későbbi válaszból hiányzik vagy érvénytelen a mező, a korábban mentett érték marad.
 
-**Elavult oldalak lista.** A Beállítások → Karbantartás oldal „Tracker" blokkja alatt, csak `manage_options` jogosultsággal: ugyanaz a halmaz és küszöb, a legrégebbi elöl, legfeljebb 200 sor (az összes darabszám felette), cím, típus, utolsó módosítás napja, szerkesztés link.
+**Elavult oldalak lista.** A Beállítások → Karbantartás oldal „Tracker" blokkja alatt, csak `manage_options` jogosultsággal: ugyanaz a halmaz és küszöb, a legrégebbi elöl, legfeljebb 200 sor (az összes darabszám felette, pl. „14 elavult a 40 közzétett oldalból"), cím, utolsó módosítás napja, szerkesztés link.
 
 **A ping.** Ha a `cmm_settings['is_active']` **értéke változik** (admin mentés, „Alapértelmezett értékek visszaállítása", bármilyen más `update_option`), a plugin a kérés végén egyszer `POST {DEVTRACKER_URL}/api/v1/wp/status` jelzést küld (5 s időkorlát, átirányítás nélkül, `{"schema":1,"site_uuid":...,"maintenance":...,"changed_at":...}`). Más beállítás mentése nem küld semmit. A ping nem blokkolja a mentést: FastCGI-n a válasz lezárása után megy, egyébként (pl. `mod_php`) egyszeri cron-eseményre bízza, így az admin sosem vár a hálózatra. Minden nem 2xx választ és hibát csendben eltűr, nincs újrapróba és admin hibaüzenet, mert a következő napi jelentés `maintenance` mezője úgyis helyreállít. Az eredmény rövid szövege a `cmm_dt_ping` opcióba kerül (a Tracker blokkban látszik). Amíg az oldal sosem jelentett sikeresen, nem megy ping (a tracker még nem ismeri): ilyenkor a bejelentkezési jelentés `maintenance` mezője viszi az állapotot. A ping nem függ a karbantartás módtól. Az új oldalak karbantartásban indulnak: az aktiválás `is_active = 1`-et ír, ez nem számít váltásnak.
 
 ## Changelog
+
+### 1.3.1
+
+- Fix: az oldal-frissesség (`freshness`) mérési halmaza csak a közzétett oldal (`page`). Az 1.3.0 a bejegyzéseket és a sablonokat is számolta, ami az oldalt tévesen frissnek vagy elavultnak mutatta. A `cmm_dt_freshness_post_types` szűrő marad (egy oldalnál bővíthető). Az „Elavult oldalak" lista és a feliratok is „oldal"-ra álltak át, a „Típus" oszlop elmarad.
+- Nem változott: a napi tartalom-számlálás (az engedélyezett felhasználók munkája) továbbra is mind az öt vödröt számolja. A `schema` és a mezők nevei változatlanok; a következő napi jelentés felülírja az 1.3.0-ban számolt értéket.
 
 ### 1.3.0
 
