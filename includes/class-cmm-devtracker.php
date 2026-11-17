@@ -59,6 +59,11 @@ class CMM_Devtracker {
 	const OPT_MAINT_CHANGED = 'cmm_dt_maint_changed_at';
 	const OPT_PING          = 'cmm_dt_ping';
 
+	// Kiadás jelzése (1.3.2): a born csak az első aktiváláskor áll be, a released a "kiadás" választáskor.
+	const OPT_BORN      = 'cmm_dt_born_in_maintenance';
+	const OPT_RELEASED  = 'cmm_dt_released';
+	const RELEASE_FIELD = 'cmm_release_choice';
+
 	const TRANSIENT_VCHECK  = 'cmm_dt_vcheck';
 	const TRANSIENT_CATCHUP = 'cmm_dt_catchup';
 	const TRANSIENT_LOCK    = 'cmm_dt_lock';
@@ -105,11 +110,19 @@ class CMM_Devtracker {
 	/**
 	 * Aktiváláskor: bejelentkezés ütemezése, ha van konfiguráció.
 	 *
+	 * Az oldal "karbantartásban született" jelölése csak az első aktiváláskor (friss telepítés, most létrejött
+	 * cmm_settings) és csak bekötött konfigurációval áll be. Egy meglévő oldalon (frissítés, újraaktiválás) a
+	 * cmm_settings már létezik, ott az opció nem jön létre: az éles oldal átmeneti karbantartása nem kiadás.
+	 *
+	 * @param bool $fresh_install Most jött-e létre a cmm_settings (az első aktiválás).
 	 * @return void
 	 */
-	public static function on_activation() {
+	public static function on_activation( $fresh_install = false ) {
 		if ( ! self::is_configured() ) {
 			return;
+		}
+		if ( $fresh_install && self::maintenance_active() ) {
+			add_option( self::OPT_BORN, '1', '', false );
 		}
 		self::ensure_daily_scheduled();
 		self::schedule_registration();
@@ -945,6 +958,13 @@ class CMM_Devtracker {
 		if ( '' !== $changed_at ) {
 			$payload['maintenance_changed_at'] = $changed_at;
 		}
+		// Kiadás: csak ha jelezték, és sosem false értékkel (a hiány azt jelenti, hogy nem jelezték, nem azt, hogy
+		// visszavonták). A tracker az első kiadást tartja meg.
+		$released_at = self::get_released_at();
+		if ( '' !== $released_at ) {
+			$payload['released']    = true;
+			$payload['released_at'] = $released_at;
+		}
 
 		// Frissesség: a küldés pillanatában számolva. Ha nem számolható, a mező kimarad ("nincs adat" nem 0).
 		$freshness = CMM_Devtracker_Freshness::snapshot();
@@ -1047,6 +1067,84 @@ class CMM_Devtracker {
 	// ------------------------------------------------------------------
 
 	/**
+	 * A kiadás ideje (UTC ISO 8601). Üres, ha az oldalt még nem jelezték kiadottnak.
+	 *
+	 * @return string
+	 */
+	private static function get_released_at() {
+		$value = get_option( self::OPT_RELEASED, '' );
+		if ( is_string( $value ) && 1 === preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/', $value ) ) {
+			return $value;
+		}
+		return '';
+	}
+
+	/**
+	 * Kérdezhet-e még az oldal a kiadásról: bekötve van, karbantartásban született, és még nem jelezték kiadottnak.
+	 * Konfiguráció nélkül, vagy az 1.2.x-ről frissített (nincs "született" jelölés) oldalon soha.
+	 *
+	 * @return bool
+	 */
+	public static function release_pending() {
+		return self::is_configured() && '' !== (string) get_option( self::OPT_BORN, '' ) && '' === self::get_released_at();
+	}
+
+	/**
+	 * Kell-e most kérdést megjeleníteni az adminban: kérdezhet, és a karbantartás jelenleg be van kapcsolva.
+	 *
+	 * @return bool
+	 */
+	public static function should_ask_release() {
+		return self::release_pending() && self::maintenance_active();
+	}
+
+	/**
+	 * A felhasználó a kérdésre "kiadás"-t választott-e ebben a kérésben.
+	 *
+	 * Csak a valódi admin-mentés számít: a beállítások űrlapja, érvényes nonce-szal, manage_options jogosultsággal.
+	 * WP-CLI, adatbázis-szerkesztés vagy JS nélküli mentés nem ad ilyen választ, ott a kikapcsolás nem kiadás.
+	 *
+	 * @return bool
+	 */
+	private static function release_chosen() {
+		if ( ! is_admin() || ! current_user_can( 'manage_options' ) ) {
+			return false;
+		}
+		$page   = isset( $_POST['option_page'] ) ? sanitize_key( wp_unslash( $_POST['option_page'] ) ) : '';
+		$nonce  = isset( $_POST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ) : '';
+		$choice = isset( $_POST[ self::RELEASE_FIELD ] ) ? sanitize_key( wp_unslash( $_POST[ self::RELEASE_FIELD ] ) ) : '';
+		if ( 'cmm_settings_group' !== $page || ! wp_verify_nonce( $nonce, 'cmm_settings_group-options' ) ) {
+			return false;
+		}
+		return 'released' === $choice;
+	}
+
+	/**
+	 * A kérdés az adminban (a "Karbantartás mód bekapcsolva" jelölőnégyzet alatt). Alapból rejtett: az admin.js
+	 * csak akkor mutatja, ha a jelölőnégyzetet kikapcsolják, és ilyenkor választás nélkül nem engedi a mentést.
+	 * A rádiógombok rejtve letiltottak, így nem kerülnek az űrlapba.
+	 *
+	 * @return void
+	 */
+	public static function render_release_question() {
+		?>
+		<fieldset id="cmm-release-question" hidden style="margin-top: 10px; padding: 10px 14px; border-left: 4px solid #dba617; background: #fff8e5; max-width: 560px;">
+			<legend class="screen-reader-text">Elkészült az oldal?</legend>
+			<p style="margin-top: 0;"><strong>Elkészült az oldal?</strong> A devtracker ebből tudja, mikor lett kész az új oldal.</p>
+			<label style="display: block; margin-bottom: 6px;">
+				<input type="radio" name="<?php echo esc_attr( self::RELEASE_FIELD ); ?>" value="released" disabled />
+				Elkészült az oldal (kiadás): az oldal véglegesen kikerül a karbantartásból
+			</label>
+			<label style="display: block;">
+				<input type="radio" name="<?php echo esc_attr( self::RELEASE_FIELD ); ?>" value="temporary" disabled />
+				Csak átmenetileg kapcsolom ki (például tesztelés): az oldal építés alatt marad
+			</label>
+			<p id="cmm-release-error" role="alert" hidden style="color: #d63638; margin-bottom: 0;">Válassz a két lehetőség közül, mielőtt mented a beállításokat.</p>
+		</fieldset>
+		<?php
+	}
+
+	/**
 	 * A karbantartás mód aktuális állapota (a cmm_settings is_active értéke).
 	 *
 	 * @return bool
@@ -1107,7 +1205,14 @@ class CMM_Devtracker {
 		if ( $was === $is ) {
 			return;
 		}
-		update_option( self::OPT_MAINT_CHANGED, gmdate( 'Y-m-d\TH:i:s\Z' ), false );
+		$now = gmdate( 'Y-m-d\TH:i:s\Z' );
+		update_option( self::OPT_MAINT_CHANGED, $now, false );
+
+		// Kiadás: csak bekapcsolt -> kikapcsolt váltásnál, kérdésre adott kifejezett válasszal. A kiadás ideje
+		// megegyezik a váltás idejével: így a ping csak az éppen kiadott váltásnál visz "released" jelzést.
+		if ( $was && ! $is && self::release_pending() && self::release_chosen() ) {
+			update_option( self::OPT_RELEASED, $now, false );
+		}
 		if ( $this->ping_queued ) {
 			return;
 		}
@@ -1167,6 +1272,11 @@ class CMM_Devtracker {
 			'maintenance' => self::maintenance_active(),
 			'changed_at'  => '' !== $changed_at ? $changed_at : gmdate( 'Y-m-d\TH:i:s\Z' ),
 		);
+		// A kiadás jelzése csak a kiadást kiváltó váltás pingjében, és csak kikapcsolt karbantartás mellett.
+		$released_at = self::get_released_at();
+		if ( ! $payload['maintenance'] && '' !== $released_at && $released_at === $changed_at ) {
+			$payload['released'] = true;
+		}
 
 		$response = wp_remote_post(
 			self::get_url() . self::PING_PATH,
@@ -1253,6 +1363,21 @@ class CMM_Devtracker {
 							echo esc_html( wp_date( 'Y-m-d H:i', (int) $ping['time'] ) . ' (' . ( isset( $ping['result'] ) ? self::scrub( (string) $ping['result'] ) : '' ) . ')' );
 						} else {
 							echo 'még nem volt';
+						}
+						?>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">Kiadás jelzése</th>
+					<td>
+						<?php
+						$released_at = self::get_released_at();
+						if ( '' !== $released_at ) {
+							echo esc_html( 'jelezve (' . wp_date( 'Y-m-d H:i', (int) strtotime( $released_at ) ) . ')' );
+						} elseif ( self::release_pending() ) {
+							echo 'még nem jelezve (a karbantartás kikapcsolásakor rákérdez)';
+						} else {
+							echo 'nem kérdez (az oldal nem karbantartásban született)';
 						}
 						?>
 					</td>

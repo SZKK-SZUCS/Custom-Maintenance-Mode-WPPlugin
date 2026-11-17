@@ -59,7 +59,7 @@ class CMM_Admin {
     public function enqueue_scripts( $hook ) {
         if ( 'settings_page_custom-maintenance-mode' !== $hook ) { return; }
         wp_enqueue_media();
-        wp_enqueue_script( 'cmm-admin-js', plugin_dir_url( dirname( __FILE__ ) ) . 'assets/js/admin.js', array( 'jquery' ), '1.0.0', true );
+        wp_enqueue_script( 'cmm-admin-js', plugin_dir_url( dirname( __FILE__ ) ) . 'assets/js/admin.js', array( 'jquery' ), defined( 'CMM_VERSION' ) ? CMM_VERSION : '1.0.0', true );
     }
 
     public function add_plugin_page() {
@@ -118,6 +118,12 @@ class CMM_Admin {
         $options = get_option( 'cmm_settings' );
         $is_active = isset( $options['is_active'] ) ? $options['is_active'] : 0;
         echo '<input type="checkbox" name="cmm_settings[is_active]" value="1" ' . checked( 1, $is_active, false ) . ' />';
+
+		// Új oldalon, a karbantartás kikapcsolásakor rákérdez, hogy elkészült-e az oldal (devtracker). Konfiguráció
+		// nélkül, kiadott vagy éles (nem karbantartásban született) oldalon nem jelenik meg.
+		if ( CMM_Devtracker::should_ask_release() ) {
+			CMM_Devtracker::render_release_question();
+		}
     }
 
     public function force_bilingual_render() {
