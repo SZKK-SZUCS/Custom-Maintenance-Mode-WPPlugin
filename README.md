@@ -4,7 +4,7 @@
 **Requires at least:** 5.8
 **Tested up to:** 6.4
 **Requires PHP:** 7.4
-**Stable tag:** 1.3.1
+**Stable tag:** 1.3.2
 **License:** GPLv2 or later
 
 ## Description
@@ -95,7 +95,23 @@ A devtracker-jelentő két új dolgot hordoz. Ugyanúgy csak bekötött (`DEVTRA
 
 **A ping.** Ha a `cmm_settings['is_active']` **értéke változik** (admin mentés, „Alapértelmezett értékek visszaállítása", bármilyen más `update_option`), a plugin a kérés végén egyszer `POST {DEVTRACKER_URL}/api/v1/wp/status` jelzést küld (5 s időkorlát, átirányítás nélkül, `{"schema":1,"site_uuid":...,"maintenance":...,"changed_at":...}`). Más beállítás mentése nem küld semmit. A ping nem blokkolja a mentést: FastCGI-n a válasz lezárása után megy, egyébként (pl. `mod_php`) egyszeri cron-eseményre bízza, így az admin sosem vár a hálózatra. Minden nem 2xx választ és hibát csendben eltűr, nincs újrapróba és admin hibaüzenet, mert a következő napi jelentés `maintenance` mezője úgyis helyreállít. Az eredmény rövid szövege a `cmm_dt_ping` opcióba kerül (a Tracker blokkban látszik). Amíg az oldal sosem jelentett sikeresen, nem megy ping (a tracker még nem ismeri): ilyenkor a bejelentkezési jelentés `maintenance` mezője viszi az állapotot. A ping nem függ a karbantartás módtól. Az új oldalak karbantartásban indulnak: az aktiválás `is_active = 1`-et ír, ez nem számít váltásnak.
 
+## Kiadás jelzése (1.3.2)
+
+A devtracker az új oldalak életútját követi: mennyi munkaidő ment egy új oldal felépítésére, és mennyi az után, hogy kiadták. Ehhez tudnia kell, mikor lett kész az oldal. A karbantartás mód kikapcsolása ezt önmagában nem mondja meg (tesztelés közben is kikapcsolják), ezért a plugin **rákérdez**. Csak bekötött (`DEVTRACKER_URL` + `DEVTRACKER_KEY`) oldalon él, egyébként nincs kérdés és nincs új opció.
+
+**Mikor kérdez.** Amikor a Beállítások → Karbantartás oldalon a karbantartás módot **bekapcsoltról kikapcsoltra** váltják, és mindhárom feltétel teljesül: a jelentő be van kötve; az oldalt még nem jelezték kiadottnak (`cmm_dt_released`); az oldal **karbantartásban született**, vagyis a plugin első aktiválásakor (friss telepítés, bekötött konfigurációval) a karbantartás be volt kapcsolva, és ezt a `cmm_dt_born_in_maintenance` opcióba jegyezte (csak aktiváláskor áll be). Az 1.2.x-ről frissített, már éles oldalakon ez az opció nincs beállítva, ott soha nincs kérdés. Ugyanígy nincs kérdés, ha a pluginnal egy már létező beállítású oldalt aktiválnak újra, és a karbantartás **bekapcsolásánál** sem.
+
+**A kérdés.** A „Karbantartás mód bekapcsolva” jelölőnégyzet alatt jelenik meg, amint kikapcsolják: „Elkészült az oldal (kiadás)” vagy „Csak átmenetileg kapcsolom ki”. Választás nélkül a mentés nem megy át (JS). A szerver külön ellenőriz: kikapcsolás kérdés nélkül (WP-CLI, adatbázis-szerkesztés, JS nélküli mentés) **nem minősül kiadásnak**, és nem is blokkolja a mentést. Csak az érvényes nonce-szal, `manage_options` joggal érkező admin-mentés „kiadás” válasza számít.
+
+**Mi történik.** *Kiadás:* a plugin elmenti a `cmm_dt_released` opciót (UTC ISO 8601), a karbantartás-váltás pingje (`POST /api/v1/wp/status`) `"released": true` mezőt is visz (csak `maintenance: false` mellett, és csak az éppen kiadó váltásnál), a napi jelentésekben és a bejelentkezésben pedig `"released": true` és `"released_at"` szerepel. Innentől nem kérdez többet. *Átmeneti:* a ping `released` nélkül megy, a jelentés nem hordoz kiadást, és a következő kikapcsolásnál újra kérdez. A `released` soha nem megy `false` értékkel: a hiány azt jelenti, hogy nem jelezték, nem azt, hogy visszavonták. Ha a devtracker nem érhető el, a kiadás a következő napi jelentéssel utólag is eljut. A Tracker blokk egy csak olvasható sorban mutatja az állapotot. A minták: `sample-report.json`, `sample-status.json`.
+
+Ismert korlát: ha egy oldalt a bekötés (`DEVTRACKER_*`) **előtt** aktiváltak, az opció nem jön létre, ott nincs kérdés (a csapatvezető a trackerben kézzel is megjelölheti az oldalt kiadottnak).
+
 ## Changelog
+
+### 1.3.2
+
+- Új: kiadás jelzése. Új, karbantartásban született oldalon a karbantartás kikapcsolásakor a plugin rákérdez, hogy elkészült-e az oldal. „Kiadás” esetén a ping `released: true` mezőt visz, és a jelentések `released` és `released_at` mezőt hordoznak. Átmeneti kikapcsolásnál nincs jelzés, és újra kérdez. Kérdés nélküli kikapcsolás (WP-CLI, adatbázis, JS nélkül) nem kiadás és nem blokkol. Konfiguráció nélkül, 1.2.x-ről frissített éles oldalon és bekapcsoláskor nincs kérdés.
 
 ### 1.3.1
 

@@ -52,4 +52,42 @@ jQuery(document).ready(function ($) {
     e.preventDefault();
     $(this).closest(".cmm-link-row").remove();
   });
+
+  // Kiadás kérdése (devtracker): csak akkor van a lapon, ha a szerver szerint kérdeznie kell, és ilyenkor az oldal
+  // a mentett állapotban karbantartásban van. A jelölőnégyzet kikapcsolásakor jelenik meg, és választás nélkül a
+  // mentés nem megy át. A szerver külön ellenőrzi: kérdés nélküli kikapcsolás nem minősül kiadásnak.
+  var $question = $("#cmm-release-question");
+  var $active = $('input[name="cmm_settings[is_active]"]');
+  if ($question.length && $active.length) {
+    var $choices = $question.find('input[type="radio"]');
+    var $error = $("#cmm-release-error");
+
+    var syncQuestion = function () {
+      var show = !$active.prop("checked");
+      $question.prop("hidden", !show);
+      // Rejtve letiltva: nem kerül az űrlapba, és nem akadályozza a mentést.
+      $choices.prop("disabled", !show);
+      if (!show) {
+        $choices.prop("checked", false);
+        $error.prop("hidden", true);
+      }
+    };
+    $active.on("change", syncQuestion);
+    syncQuestion();
+
+    $choices.on("change", function () {
+      $error.prop("hidden", true);
+    });
+
+    $active.closest("form").on("submit", function (e) {
+      if ($question.prop("hidden") || $choices.filter(":checked").length) {
+        return;
+      }
+      e.preventDefault();
+      // A kérdés a Beállítások fülön van: ha másik fülről mentenek, oda váltunk.
+      $('#cmm-tabs a[href="#settings"]').trigger("click");
+      $error.prop("hidden", false);
+      $choices.first().trigger("focus");
+    });
+  }
 });
