@@ -5,8 +5,10 @@
  * Külön osztály, hogy a jelentő (CMM_Devtracker) ne nőjön tovább. A jelentés és az admin lista ugyanazt a mérési
  * halmazt és ugyanazt a küszöböt használja (egy függvényből), így a két szám nem térhet el egymástól.
  *
- * Adatvédelem: a pillanatkép csak egy dátumot és két darabszámot ad. A konkrét elavult oldalak listája kizárólag
- * a WordPress adminban jelenik meg, a jelentésbe soha nem kerül.
+ * Adatvédelem (1.4.0 óta, a projekt gazdájának döntése, 2026-11-18): a jelentésbe egy dátum, két darabszám és a
+ * KÖZZÉTETT, elavult OLDALAK listája (azonosító, cím, útvonal, módosítási nap) kerülhet: ez a webhely nyilvános
+ * szerkezete. Soha nem kerülhet bele: tartalom, szerző, felhasználónév, e-mail, IP, vázlat, privát, jelszóval védett
+ * vagy ütemezett oldal, más bejegyzéstípus.
  *
  * @package custom-maintenance-mode
  */
@@ -161,9 +163,11 @@ class CMM_Devtracker_Freshness {
 	 *
 	 * Ha nem számolható (adatbázis-hiba), null: a hívó ilyenkor kihagyja a mezőt, mert a "nincs adat" nem 0.
 	 *
+	 * @param string|null $cutoff A küszöb időpontja (GMT); null esetén most számolódik. A jelentés ugyanazt adja át a
+	 *                            listának is, hogy a szám és a lista soha ne térjen el egy másodpercnyi eltolódás miatt sem.
 	 * @return array|null array( 'last_content_change' => string|null, 'published' => int, 'stale' => int ).
 	 */
-	public static function snapshot() {
+	public static function snapshot( $cutoff = null ) {
 		global $wpdb;
 		$types = self::post_types();
 		if ( empty( $types ) ) {
@@ -174,6 +178,9 @@ class CMM_Devtracker_Freshness {
 			);
 		}
 
+		if ( null === $cutoff ) {
+			$cutoff = self::cutoff( self::stale_days() );
+		}
 		list( $where, $args ) = self::where( $types );
 		$eff                  = self::eff();
 		$epoch                = self::EPOCH;
@@ -185,7 +192,7 @@ class CMM_Devtracker_Freshness {
 		$suppress = $wpdb->suppress_errors( true );
 		// Az aggregálás szándékosan közvetlen lekérdezés (a bejegyzések nem töltődnek be PHP-ba); a változó részek helyőrzősek.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-		$row   = $wpdb->get_row( $wpdb->prepare( $sql, array_merge( array( self::cutoff( self::stale_days() ) ), $args ) ), ARRAY_A );
+		$row   = $wpdb->get_row( $wpdb->prepare( $sql, array_merge( array( $cutoff ), $args ) ), ARRAY_A );
 		$error = (string) $wpdb->last_error;
 		// phpcs:enable
 		$wpdb->suppress_errors( $suppress );
@@ -224,21 +231,8 @@ class CMM_Devtracker_Freshness {
 			return $out;
 		}
 
-		list( $where, $args ) = self::where( $types );
-		$eff                  = self::eff();
-		$epoch                = self::EPOCH;
-		$sql                  = "SELECT p.ID, p.post_title, p.post_type, {$eff} AS modified_gmt"
-			. " FROM {$wpdb->posts} p WHERE {$where} AND {$eff} > '{$epoch}' AND {$eff} < %s"
-			. ' ORDER BY modified_gmt ASC, p.ID ASC LIMIT %d';
-
-		$suppress = $wpdb->suppress_errors( true );
-		// Csak a megjelenítendő sorok, legfeljebb 200; a változó részek helyőrzősek.
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-		$rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $args, array( self::cutoff( $days ), self::MAX_LIST_ROWS ) ) ), ARRAY_A );
-		$err  = (string) $wpdb->last_error;
-		// phpcs:enable
-		$wpdb->suppress_errors( $suppress );
-		if ( ! is_array( $rows ) || '' !== $err ) {
+		$rows = self::stale_rows( $types, self::cutoff( $days ), false );
+		if ( null === $rows ) {
 			return null;
 		}
 		foreach ( $rows as $row ) {
@@ -250,6 +244,124 @@ class CMM_Devtracker_Freshness {
 			);
 		}
 		return $out;
+	}
+
+	/**
+	 * Az elavult sorok: egyetlen lekérdezés, a legrégebbi elöl, legfeljebb MAX_LIST_ROWS. A helyi lista és a jelentés
+	 * lista is ezt használja, így ugyanaz a halmaz és a sorrend.
+	 *
+	 * @param string[] $types             Post type-ok (nem üres).
+	 * @param string   $cutoff            A küszöb időpontja (GMT).
+	 * @param bool     $exclude_protected Igaz: a jelszóval védett oldal kimarad (a jelentésben a címe sem látszhat).
+	 * @return array[]|null Sorok (ID, post_title, post_type, modified_gmt), vagy null adatbázis-hibánál.
+	 */
+	private static function stale_rows( array $types, $cutoff, $exclude_protected ) {
+		global $wpdb;
+		list( $where, $args ) = self::where( $types );
+		if ( $exclude_protected ) {
+			$where .= " AND p.post_password = ''";
+		}
+		$eff   = self::eff();
+		$epoch = self::EPOCH;
+		$sql   = "SELECT p.ID, p.post_title, p.post_type, {$eff} AS modified_gmt"
+			. " FROM {$wpdb->posts} p WHERE {$where} AND {$eff} > '{$epoch}' AND {$eff} < %s"
+			. ' ORDER BY modified_gmt ASC, p.ID ASC LIMIT %d';
+
+		$suppress = $wpdb->suppress_errors( true );
+		// Csak a megjelenítendő sorok, legfeljebb 200; a változó részek helyőrzősek.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $args, array( $cutoff, self::MAX_LIST_ROWS ) ) ), ARRAY_A );
+		$err  = (string) $wpdb->last_error;
+		// phpcs:enable
+		$wpdb->suppress_errors( $suppress );
+		if ( ! is_array( $rows ) || '' !== $err ) {
+			return null;
+		}
+		return $rows;
+	}
+
+	/**
+	 * A jelentésbe kerülő `freshness` mező: a pillanatkép és az elavult oldalak listája.
+	 *
+	 * A `stale_pages` kulcs hiánya azt jelenti, hogy a lista nem küldhető (a tracker a meglévőt békén hagyja); az üres
+	 * lista azt, hogy nincs elavult oldal (a tracker törli a régit). Ezért adatbázis-hibánál a kulcs kimarad.
+	 *
+	 * Jelszóval védett oldal a `stale` számában benne lehet, a listában nincs: a címe a jelszó mögötti tartalom része
+	 * lehet, ezért nem hagyhatja el a webhelyet.
+	 *
+	 * @return array|null A pillanatkép (+ `stale_pages`), vagy null, ha a pillanatkép nem számolható.
+	 */
+	public static function report() {
+		$cutoff   = self::cutoff( self::stale_days() );
+		$snapshot = self::snapshot( $cutoff );
+		if ( null === $snapshot ) {
+			return null;
+		}
+		$types = self::post_types();
+		if ( empty( $types ) || $snapshot['stale'] < 1 ) {
+			$snapshot['stale_pages'] = array();
+			return $snapshot;
+		}
+		$rows = self::stale_rows( $types, $cutoff, true );
+		if ( null !== $rows ) {
+			$pages = array();
+			foreach ( $rows as $row ) {
+				$pages[] = array(
+					'id'       => (int) $row['ID'],
+					'title'    => self::plain_title( (int) $row['ID'] ),
+					'path'     => self::page_path( (int) $row['ID'] ),
+					'modified' => (string) self::budapest_date( (string) $row['modified_gmt'] ),
+				);
+			}
+			$snapshot['stale_pages'] = $pages;
+		}
+		return $snapshot;
+	}
+
+	/**
+	 * Az oldal címe egyszerű szövegként: legfeljebb 120 karakter, HTML és entitások nélkül, lehet üres.
+	 *
+	 * A `the_title` szűrőn átmegy (a megjelenített cím), ami entitásokat (&#8211;, &amp;) tehet bele, ezért a címkék
+	 * eltávolítása és az entitások feloldása után a címkéket még egyszer eltávolítjuk: egy "&lt;b&gt;" cím sem
+	 * kerülhet HTML-nek látszó alakban a jelentésbe.
+	 *
+	 * @param int $id Bejegyzés azonosító.
+	 * @return string
+	 */
+	private static function plain_title( $id ) {
+		$title = wp_strip_all_tags( (string) get_the_title( $id ) );
+		$title = html_entity_decode( $title, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$title = wp_strip_all_tags( wp_check_invalid_utf8( $title, true ) );
+		$title = trim( (string) preg_replace( '/[\p{Cc}\s]+/u', ' ', $title ) );
+		return mb_substr( $title, 0, 120, 'UTF-8' );
+	}
+
+	/**
+	 * Az oldal címe a gyökértől: `/`-rel kezdődő útvonal és ha van, lekérdezés (`?page_id=30`). Se séma, se gépnév:
+	 * a tracker a webhely ismert címéhez fűzi, így nem mutathat idegen címre. Alkönyvtáras telepítésnél az alkönyvtár
+	 * az útvonal része.
+	 *
+	 * A tracker eldobja a szóközt, idézőjelet, `<`, `>`, `\` jelet tartalmazó és a `//`-rel kezdődő útvonalat, ezért
+	 * ilyenkor (vagy üres permalinknél) a mindig érvényes `?page_id=` alakra esünk vissza.
+	 *
+	 * @param int $id Bejegyzés azonosító.
+	 * @return string
+	 */
+	private static function page_path( $id ) {
+		$link  = get_permalink( $id );
+		$path  = '';
+		$query = '';
+		if ( is_string( $link ) && '' !== $link ) {
+			$path  = (string) wp_parse_url( $link, PHP_URL_PATH );
+			$query = (string) wp_parse_url( $link, PHP_URL_QUERY );
+		}
+		$result = '/' . ltrim( $path, '/' ) . ( '' !== $query ? '?' . $query : '' );
+		if ( is_string( $link ) && '' !== $link && 1 === preg_match( '#^/[^\s"<>\\\\]*$#', $result ) ) {
+			return $result;
+		}
+		// A home_url( '/' ) útvonala mindig `/`-re végződik ("/" vagy "/alkonyvtar/").
+		$home = (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH );
+		return '/' . ltrim( $home, '/' ) . '?page_id=' . $id;
 	}
 
 	/**

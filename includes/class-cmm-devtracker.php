@@ -967,7 +967,7 @@ class CMM_Devtracker {
 		}
 
 		// Frissesség: a küldés pillanatában számolva. Ha nem számolható, a mező kimarad ("nincs adat" nem 0).
-		$freshness = CMM_Devtracker_Freshness::snapshot();
+		$freshness = CMM_Devtracker_Freshness::report();
 		if ( null !== $freshness ) {
 			$payload['freshness'] = $freshness;
 		}
