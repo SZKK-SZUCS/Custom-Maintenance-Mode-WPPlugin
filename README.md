@@ -67,7 +67,7 @@ Ha bármelyik hiányzik, a funkció teljesen inaktív (nincs horog, nincs cron, 
 
 **Klón és staging.** Az oldal azonosítója egy véletlen UUID, mellé a gépnév (a `home_url()` gépneve, kisbetűs, port nélkül) is mentődik. Ha az adatbázist átmásolják egy másik gépnévre, a másolat új azonosítót kap, és nem örökli az eredeti el nem küldött napjait. Ismert korlát: ha egy oldal `wp-config.php`-ban a `WP_HOME`-ot a kérés gépneve alapján állítja, vagy ugyanazt az adatbázist két gépnév alatt egyszerre használják, az azonosító gépnévváltásonként újra cserélődik.
 
-**Adatvédelem.** A jelentés csak számokat és az oldal nyilvános adatait (azonosító, cím, név, verziók) tartalmazza. Nem kerül bele felhasználónév, e-mail, bejegyzés-azonosító, cím, URL, tartalom, IP.
+**Adatvédelem.** A jelentés számokat és az oldal nyilvános adatait (azonosító, cím, név, verziók) tartalmazza. Nem kerül bele felhasználónév, e-mail, tartalom, IP. Az egyetlen kivétel az 1.4.0 óta a közzétett, elavult **oldalak** listája (azonosító, cím, útvonal, módosítási nap): ez a webhely nyilvános szerkezete, nem a tartalma (a döntés a projekt gazdájáé, 2026-11-18).
 
 **Hogyan számol.**
 
@@ -85,7 +85,7 @@ A devtracker-jelentő két új dolgot hordoz. Ugyanúgy csak bekötött (`DEVTRA
 - `maintenance_changed_at` (UTC ISO 8601): az utolsó, a plugin által észlelt váltás ideje. Ha még nem volt váltás, a mező kimarad.
 - `freshness`: `last_content_change` (a legutóbbi **oldal**-módosítás napja `Europe/Budapest` szerint, **bárki** módosítását számítva, üres halmaznál `null`), `published` (a közzétett oldalak száma) és `stale` (közülük hány nem módosult a küszöb ideje óta). Ha a pillanatkép nem számolható, a mező **kimarad** (a „nincs adat" nem 0).
 
-**Mit NEM küld.** Nincs benne cím, URL, bejegyzés-azonosító, felhasználónév, tartalom, IP, és **az elavult oldalak listája sem**: az csak a WordPress adminban látszik. A kulcs és a backend címe a hibaszövegekbe és az admin felületre sem kerül.
+**Mit NEM küld.** Nincs benne felhasználónév, e-mail, szerző, tartalom, részlet, IP, és semmilyen vázlat, privát, jelszóval védett vagy ütemezett oldal, illetve más bejegyzéstípus (bejegyzés, sablon, menü, egyéni típus). A kulcs és a backend címe a hibaszövegekbe és az admin felületre sem kerül. Az egyetlen kivétel a **közzétett, elavult oldalak listája** (1.4.0 óta, lásd az „Elavult oldalak a jelentésben" fejezetet).
 
 **A mérési halmaz (1.3.1 óta csak az oldal).** `publish` állapotú `page`. Az „elavult" jelzést az oldalak tartalma indokolja (régi dátumok, megszűnt információ): egy bejegyzés nem arra való, hogy módosuljon, a sablon szerkezet, nem tartalom, ezért ezek az 1.3.0-ban tévesen frissnek vagy elavultnak mutatták az oldalt. A halmaz a `cmm_dt_freshness_post_types` szűrővel egy oldalnál bővíthető (pl. `post`-tal); a jelentés és az admin lista ugyanazt a függvényt használja. Nem számít bele alapból: bejegyzés, sablon (`wp_template`, `wp_template_part`, `elementor_library`), egyéni típus (pl. kurzus: a tömeges mentése bármit frissnek mutatna), menü, média, revízió, automatikus mentés, vázlat, privát tartalom. Ha a szűrővel az `elementor_library` bekerül, az **Elementor „kit"** (az oldal globális beállításai) akkor is kizárt. Hibás, nullás (`0000-00-00`) módosítási dátumú sornál a közzétételi dátum (`post_date_gmt`) számít; ha az is hiányzik, a sor a `published`-ben benne van, de a `last_content_change` és a `stale` számításból kimarad. A napi `days[].content` számlálás (az engedélyezett felhasználók munkája) **nem változott**: továbbra is mind az öt vödröt számolja.
 
@@ -107,7 +107,37 @@ A devtracker az új oldalak életútját követi: mennyi munkaidő ment egy új 
 
 Ismert korlát: ha egy oldalt a bekötés (`DEVTRACKER_*`) **előtt** aktiváltak, az opció nem jön létre, ott nincs kérdés (a csapatvezető a trackerben kézzel is megjelölheti az oldalt kiadottnak).
 
+## Elavult oldalak a jelentésben (1.4.0)
+
+A devtracker Oldal-frissesség lapján a csapatvezető lenyithatja egy webhely sorát, és látja a felülvizsgálandó oldalakat hivatkozásokkal. Ehhez a `freshness` mező egy új, opcionális listát kap (a `schema` marad 1):
+
+```json
+"freshness": {
+  "last_content_change": "2026-03-01",
+  "published": 40,
+  "stale": 14,
+  "stale_pages": [
+    { "id": 12, "title": "Kapcsolat", "path": "/kapcsolat/", "modified": "2026-02-10" },
+    { "id": 30, "title": "", "path": "/?page_id=30", "modified": "2026-01-04" }
+  ]
+}
+```
+
+- **Mely oldalak:** a `stale`-t adó halmaz és küszöb (közzétett `page`, a `stale_days`-nél régebben módosult), a legrégebbi elöl, **legfeljebb 200**. Ha több az elavult oldal, a `stale` az **összes** darabszám marad, a lista csak az első 200. A lista és a `stale` ugyanazzal a küszöbidővel számolódik (egy `report()` hívásban).
+- **Jelszóval védett oldal** (`post_password` nem üres) **kimarad a listából**, de a `stale` számába beleszámít, ahogy eddig is (a címe a jelszó mögötti tartalom része lehet). Ezért a `stale` ilyenkor nagyobb lehet a lista hosszánál. Vázlat, privát és ütemezett oldal eleve nem közzétett, így sem a listában, sem a `stale`-ben nincs.
+- **`id`**: a bejegyzés azonosítója (egész szám). **`title`**: egyszerű szöveg, legfeljebb 120 karakter, HTML és entitások nélkül (a `the_title` szűrőn átment cím címkéi eltávolítva, entitásai feloldva, majd a címkék még egyszer eltávolítva), lehet üres. **`path`**: az oldal címe a gyökértől, `/`-rel kezdve (a permalink útvonala és ha van, lekérdezése, pl. `?page_id=30`), **séma és gépnév nélkül**; alkönyvtáras telepítésnél az alkönyvtár is benne van. Ha a permalink üres, vagy az útvonal szóközt, idézőjelet, `<`, `>`, `\` jelet tartalmaz, a `/?page_id=<id>` alakra esik vissza. **`modified`**: az utolsó módosítás napja `YYYY-MM-DD`, `Europe/Budapest` szerint.
+- **Hiány és üres lista:** ha a pillanatkép nem számolható, a `freshness` kimarad, és a `stale_pages` sincs. Ha a pillanatkép megvan, de a lista nem számolható (adatbázis-hiba), csak a `stale_pages` marad ki. Ha nincs elavult oldal, a lista **üres** (`[]`): a tracker ilyenkor törli a régit. A kulcs hiánya azt jelenti, hogy a plugin nem tud listát küldeni, a tracker a meglévőt békén hagyja.
+- **Mikor és mennyibe kerül:** a lista a **küldéskor** számolódik (nem horgokból), egyetlen lekérdezéssel a `posts` táblán (azonosító, cím, módosítási idő, nincs tartalom a PHP-ban); a permalink és a cím oldalanként, legfeljebb a 200 elemre.
+- **Adatvédelem:** a jelentésbe ezen a listán túl továbbra sem kerül oldaltartalom, részlet, szerző, felhasználónév, e-mail, IP, vázlat, privát, jelszóval védett vagy ütemezett oldal, és más bejegyzéstípus.
+- A helyi „Elavult oldalak" lista a WordPress adminban változatlan (ugyanaz a halmaz, a jelszóval védett oldalakkal együtt). A minta: `sample-report.json`.
+
 ## Changelog
+
+### 1.4.0
+
+- Új: a devtracker-jelentés `freshness.stale_pages` listát hordoz: a közzétett, elavult oldalak (legfeljebb 200, a legrégebbi elöl) azonosítója, egyszerű szöveges címe, gyökértől számított útvonala és módosítási napja. Jelszóval védett oldal nincs a listában (a `stale`-ben benne lehet). Nincs elavult oldal: üres lista; a lista hiánya: a régi plugin / nem számolható.
+- Adatvédelem: az eddigi "a jelentés nem tartalmaz címet, URL-t, azonosítót" szabály erre az egy listára módosul (a projekt gazdájának döntése, 2026-11-18). Oldaltartalom, szerző, felhasználónév, e-mail, IP és más típus nem kerülhet bele.
+- Nem változott: a napi `days` számolás, a ping, a kiadás-jelzés, a karbantartás és a klón-észlelés.
 
 ### 1.3.2
 
